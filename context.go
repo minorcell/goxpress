@@ -14,7 +14,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 )
+
+// 定义一个Context池，用于复用Context对象
+var contextPool = sync.Pool{
+	New: func() interface{} {
+		return &Context{
+			params:  make(map[string]string),
+			store:   make(map[string]interface{}),
+			index:   -1,
+		}
+	},
+}
 
 // Context 封装了请求、响应和上下文数据
 // 定位：HTTP 请求处理的上下文对象
@@ -58,6 +70,10 @@ type Context struct {
 	// store for Set/Get methods
 	// 键值存储，用于在中间件间传递数据
 	store map[string]interface{}
+	
+	// status code has been written flag
+	// 状态码是否已写入的标志
+	statusCodeWritten bool
 }
 
 // NewContext 创建一个新的 Context 实例
@@ -67,14 +83,55 @@ type Context struct {
 //   c := NewContext(w, req)
 //   在框架内部使用，通常不需要用户直接调用
 func NewContext(w http.ResponseWriter, req *http.Request) *Context {
-	return &Context{
-		Context:  req.Context(),             // 从请求中获取标准上下文
-		Request:  req,                       // 设置 HTTP 请求
-		Response: w,                         // 设置响应写入器
-		params:   make(map[string]string),   // 初始化参数映射表
-		index:    -1,                        // 初始化索引为 -1
-		store:    make(map[string]interface{}), // 初始化存储映射表
+	// 从池中获取Context或创建新的
+	c := contextPool.Get().(*Context)
+	
+	// 初始化请求相关的字段
+	c.Context = req.Context()
+	c.Request = req
+	c.Response = w
+	
+	// 重置其他字段
+	c.index = -1
+	c.aborted = false
+	c.err = nil
+	c.statusCodeWritten = false
+	
+	// 清空maps而不是重新分配，减少内存分配
+	for k := range c.params {
+		delete(c.params, k)
 	}
+	
+	for k := range c.store {
+		delete(c.store, k)
+	}
+	
+	return c
+}
+
+// reset 重置Context状态，为复用做准备
+// 定位：Context重置方法
+// 作用：清理Context中的请求相关数据，为下次复用做准备
+// 使用方法：框架内部使用
+func (c *Context) reset() {
+	// 清空maps
+	for k := range c.params {
+		delete(c.params, k)
+	}
+	
+	for k := range c.store {
+		delete(c.store, k)
+	}
+	
+	// 重置其他字段
+	c.index = -1
+	c.aborted = false
+	c.err = nil
+	c.handlers = nil
+	c.Context = nil
+	c.Request = nil
+	c.Response = nil
+	c.statusCodeWritten = false
 }
 
 // Param 返回指定 URL 参数的值
@@ -116,7 +173,10 @@ func (c *Context) BindJSON(obj interface{}) error {
 // 使用方法：
 //   c.Status(200) // 设置状态码为 200
 func (c *Context) Status(code int) {
-	c.Response.WriteHeader(code)
+	if !c.statusCodeWritten {
+		c.Response.WriteHeader(code)
+		c.statusCodeWritten = true
+	}
 }
 
 // JSON 将指定结构体序列化为 JSON 并写入响应体
@@ -125,8 +185,11 @@ func (c *Context) Status(code int) {
 // 使用方法：
 //   c.JSON(200, map[string]interface{}{"message": "success"})
 func (c *Context) JSON(code int, obj interface{}) error {
-	c.Response.Header().Set("Content-Type", "application/json")
-	c.Response.WriteHeader(code)
+	if !c.statusCodeWritten {
+		c.Response.Header().Set("Content-Type", "application/json")
+		c.Response.WriteHeader(code)
+		c.statusCodeWritten = true
+	}
 	return json.NewEncoder(c.Response).Encode(obj)
 }
 
@@ -136,8 +199,11 @@ func (c *Context) JSON(code int, obj interface{}) error {
 // 使用方法：
 //   c.String(200, "Hello %s", name)
 func (c *Context) String(code int, format string, values ...interface{}) error {
-	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	c.Response.WriteHeader(code)
+	if !c.statusCodeWritten {
+		c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		c.Response.WriteHeader(code)
+		c.statusCodeWritten = true
+	}
 	_, err := c.Response.Write([]byte(fmt.Sprintf(format, values...)))
 	return err
 }
