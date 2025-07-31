@@ -1,25 +1,25 @@
 # goxpress
 
-A fast, intuitive web framework for Go inspired by Express.js. Built for developer productivity with excellent performance.
+一个快速、直观的 Go Web 框架，灵感来自 Express.js。专为开发者生产力而设计，同时提供出色的性能。
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/minorcell/goxpress)](https://goreportcard.com/report/github.com/minorcell/goxpress)
 [![GoDoc](https://godoc.org/github.com/minorcell/goxpress?status.svg)](https://godoc.org/github.com/minorcell/goxpress)
 [![Coverage](https://img.shields.io/badge/coverage-88.3%25-brightgreen)](https://github.com/minorcell/goxpress)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Features
+## 特性
 
-- 🚀 **Express.js-like API** - Familiar and intuitive for web developers
-- ⚡ **High Performance** - 1M+ requests/sec with efficient routing
-- 🛡️ **Type Safe** - Full Go type safety with excellent IDE support
-- 🔧 **Middleware Support** - Powerful middleware system with error handling
-- 🗂️ **Route Groups** - Organize your APIs with nested route groups
-- 📦 **Zero Dependencies** - Built on Go standard library only
-- 🧪 **Well Tested** - 88.3% test coverage with comprehensive benchmarks
+- 🚀 **类 Express.js API** - 对 Web 开发者友好且直观
+- ⚡ **高性能** - 每秒处理超过 100 万请求，路由高效
+- 🛡️ **类型安全** - 完整的 Go 类型安全支持，IDE 支持优秀
+- 🔧 **中间件支持** - 强大的中间件系统，支持错误处理
+- 🗂️ **路由组** - 使用嵌套路由组组织你的 API
+- 📦 **零依赖** - 仅基于 Go 标准库构建
+- 🧪 **充分测试** - 88.3% 测试覆盖率，全面的性能基准测试
 
-## Quick Start
+## 快速开始
 
-### Installation
+### 安装
 
 ```bash
 go mod init your-project
@@ -41,16 +41,16 @@ func main() {
     })
     
     app.Listen(":8080", func() {
-        println("Server running on http://localhost:8080")
+        println("服务器运行在 http://localhost:8080")
     })
 }
 ```
 
-## Tutorial
+## 教程
 
-### 1. Basic HTTP Server
+### 1. 基础 HTTP 服务
 
-#### Simple Routes
+#### 简单路由
 
 ```go
 package main
@@ -60,7 +60,7 @@ import "github.com/minorcell/goxpress"
 func main() {
     app := goxpress.New()
     
-    // Different HTTP methods
+    // 不同的 HTTP 方法
     app.GET("/users", getUsers)
     app.POST("/users", createUser)
     app.PUT("/users/:id", updateUser)
@@ -82,12 +82,12 @@ func createUser(c *goxpress.Context) {
     }
     
     if err := c.BindJSON(&user); err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid JSON"})
+        c.JSON(400, map[string]string{"error": "无效的 JSON"})
         return
     }
     
     c.JSON(201, map[string]interface{}{
-        "message": "User created",
+        "message": "用户创建成功",
         "user":    user,
     })
 }
@@ -95,26 +95,26 @@ func createUser(c *goxpress.Context) {
 func updateUser(c *goxpress.Context) {
     id := c.Param("id")
     c.JSON(200, map[string]string{
-        "message": "User " + id + " updated",
+        "message": "用户 " + id + " 已更新",
     })
 }
 
 func deleteUser(c *goxpress.Context) {
     id := c.Param("id")
     c.JSON(200, map[string]string{
-        "message": "User " + id + " deleted",
+        "message": "用户 " + id + " 已删除",
     })
 }
 ```
 
-#### Working with Parameters and Query Strings
+#### 使用参数和查询字符串
 
 ```go
 app.GET("/users/:id", func(c *goxpress.Context) {
-    // Path parameters
+    // 路径参数
     userID := c.Param("id")
     
-    // Query parameters
+    // 查询参数
     page := c.Query("page")
     limit := c.Query("limit")
     
@@ -126,12 +126,12 @@ app.GET("/users/:id", func(c *goxpress.Context) {
 })
 
 // GET /users/123?page=1&limit=10
-// Returns: {"user_id": "123", "page": "1", "limit": "10"}
+// 返回: {"user_id": "123", "page": "1", "limit": "10"}
 ```
 
-### 2. Middleware
+### 2. 中间件
 
-#### Built-in Middleware
+#### 内置中间件
 
 ```go
 package main
@@ -141,9 +141,9 @@ import "github.com/minorcell/goxpress"
 func main() {
     app := goxpress.New()
     
-    // Built-in middleware
-    app.Use(goxpress.Logger())   // Request logging
-    app.Use(goxpress.Recover())  // Panic recovery
+    // 内置中间件
+    app.Use(goxpress.Logger())   // 请求日志
+    app.Use(goxpress.Recover())  // Panic 恢复
     
     app.GET("/", func(c *goxpress.Context) {
         c.String(200, "Hello with middleware!")
@@ -153,34 +153,34 @@ func main() {
 }
 ```
 
-#### Custom Middleware
+#### 自定义中间件
 
 ```go
-// Authentication middleware
+// 认证中间件
 func AuthMiddleware() goxpress.HandlerFunc {
     return func(c *goxpress.Context) {
         token := c.Request.Header.Get("Authorization")
         
         if token == "" {
-            c.JSON(401, map[string]string{"error": "Missing token"})
-            c.Abort() // Stop further processing
+            c.JSON(401, map[string]string{"error": "缺少 token"})
+            c.Abort() // 停止后续处理
             return
         }
         
-        // Validate token (simplified)
+        // 验证 token（简化版）
         if token != "Bearer valid-token" {
-            c.JSON(401, map[string]string{"error": "Invalid token"})
+            c.JSON(401, map[string]string{"error": "无效的 token"})
             c.Abort()
             return
         }
         
-        // Store user info in context
+        // 在上下文中存储用户信息
         c.Set("user_id", "12345")
-        c.Next() // Continue to next middleware/handler
+        c.Next() // 继续到下一个中间件/处理器
     }
 }
 
-// CORS middleware
+// CORS 中间件
 func CORSMiddleware() goxpress.HandlerFunc {
     return func(c *goxpress.Context) {
         c.Response.Header().Set("Access-Control-Allow-Origin", "*")
@@ -199,19 +199,19 @@ func CORSMiddleware() goxpress.HandlerFunc {
 func main() {
     app := goxpress.New()
     
-    // Global middleware
+    // 全局中间件
     app.Use(goxpress.Logger())
     app.Use(CORSMiddleware())
     
-    // Protected routes
+    // 受保护的路由
     protected := app.Route("/api")
-    protected.Use(AuthMiddleware()) // Apply to all routes in this group
+    protected.Use(AuthMiddleware()) // 应用到此组中的所有路由
     
     protected.GET("/profile", func(c *goxpress.Context) {
         userID, _ := c.GetString("user_id")
         c.JSON(200, map[string]string{
             "user_id": userID,
-            "profile": "User profile data",
+            "profile": "用户个人资料数据",
         })
     })
     
@@ -219,13 +219,13 @@ func main() {
 }
 ```
 
-### 3. Context and Request Handling
+### 3. 上下文和请求处理
 
-#### Request Data
+#### 请求数据
 
 ```go
 app.POST("/submit", func(c *goxpress.Context) {
-    // JSON body parsing
+    // JSON 主体解析
     var data struct {
         Name    string `json:"name"`
         Email   string `json:"email"`
@@ -233,25 +233,25 @@ app.POST("/submit", func(c *goxpress.Context) {
     }
     
     if err := c.BindJSON(&data); err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid JSON format"})
+        c.JSON(400, map[string]string{"error": "无效的 JSON 格式"})
         return
     }
     
-    // Validation
+    // 验证
     if data.Name == "" || data.Email == "" {
-        c.JSON(400, map[string]string{"error": "Name and email are required"})
+        c.JSON(400, map[string]string{"error": "姓名和邮箱是必需的"})
         return
     }
     
-    // Path and query parameters
+    // 路径和查询参数
     category := c.Param("category")
     source := c.Query("source")
     
-    // Store in context for other middleware
+    // 为其他中间件存储在上下文中
     c.Set("validated_data", data)
     
     c.JSON(200, map[string]interface{}{
-        "message":  "Data received successfully",
+        "message":  "数据接收成功",
         "data":     data,
         "category": category,
         "source":   source,
@@ -259,18 +259,18 @@ app.POST("/submit", func(c *goxpress.Context) {
 })
 ```
 
-#### Response Types
+#### 响应类型
 
 ```go
 app.GET("/examples", func(c *goxpress.Context) {
-    // String response
-    c.String(200, "Plain text response")
+    // 字符串响应
+    c.String(200, "纯文本响应")
 })
 
 app.GET("/json", func(c *goxpress.Context) {
-    // JSON response
+    // JSON 响应
     c.JSON(200, map[string]interface{}{
-        "message": "Success",
+        "message": "成功",
         "data":    []int{1, 2, 3},
         "meta": map[string]string{
             "version": "1.0",
@@ -279,22 +279,22 @@ app.GET("/json", func(c *goxpress.Context) {
 })
 
 app.GET("/custom", func(c *goxpress.Context) {
-    // Custom headers and status
+    // 自定义标头和状态
     c.Response.Header().Set("X-Custom-Header", "value")
     c.Status(201)
     c.JSON(201, map[string]string{"created": "true"})
 })
 ```
 
-### 4. Route Groups and Organization
+### 4. 路由组和组织
 
-#### Basic Route Groups
+#### 基础路由组
 
 ```go
 func main() {
     app := goxpress.New()
     
-    // API v1 routes
+    // API v1 路由
     v1 := app.Route("/api/v1")
     {
         v1.GET("/users", listUsers)
@@ -304,7 +304,7 @@ func main() {
         v1.DELETE("/users/:id", deleteUser)
     }
     
-    // API v2 routes with different implementation
+    // API v2 路由，不同的实现
     v2 := app.Route("/api/v2")
     {
         v2.GET("/users", listUsersV2)
@@ -315,36 +315,36 @@ func main() {
 }
 ```
 
-#### Nested Groups with Middleware
+#### 带中间件的嵌套组
 
 ```go
 func main() {
     app := goxpress.New()
     
-    // Global middleware
+    // 全局中间件
     app.Use(goxpress.Logger())
     app.Use(goxpress.Recover())
     
-    // Public API (no authentication required)
+    // 公共 API（无需认证）
     public := app.Route("/api/public")
     public.GET("/health", healthCheck)
     public.POST("/register", registerUser)
     public.POST("/login", loginUser)
     
-    // Protected API (authentication required)
+    // 受保护的 API（需要认证）
     api := app.Route("/api")
     api.Use(AuthMiddleware())
     
-    // User management
+    // 用户管理
     users := api.Group("/users")
     users.GET("/", listUsers)
     users.GET("/:id", getUser)
     users.PUT("/:id", updateUser)
     users.DELETE("/:id", deleteUser)
     
-    // Admin only routes
+    // 仅管理员路由
     admin := api.Group("/admin")
-    admin.Use(AdminMiddleware()) // Additional admin check
+    admin.Use(AdminMiddleware()) // 额外的管理员检查
     admin.GET("/stats", getStats)
     admin.DELETE("/users/:id", adminDeleteUser)
     
@@ -355,9 +355,9 @@ func AdminMiddleware() goxpress.HandlerFunc {
     return func(c *goxpress.Context) {
         userID, _ := c.GetString("user_id")
         
-        // Check if user is admin (simplified)
+        // 检查用户是否为管理员（简化版）
         if !isAdmin(userID) {
-            c.JSON(403, map[string]string{"error": "Admin access required"})
+            c.JSON(403, map[string]string{"error": "需要管理员权限"})
             c.Abort()
             return
         }
@@ -367,102 +367,43 @@ func AdminMiddleware() goxpress.HandlerFunc {
 }
 ```
 
-### 5. Error Handling
+### 5. 错误处理
 
-#### Global Error Handler
+#### 全局错误处理器
 
 ```go
 func main() {
     app := goxpress.New()
     
-    // Global error handler
+    // 全局错误处理器
     app.UseError(func(err error, c *goxpress.Context) {
-        // Log the error
-        fmt.Printf("Error: %v\n", err)
+        // 记录错误
+        fmt.Printf("错误: %v\n", err)
         
-        // Return appropriate response
+        // 返回适当的响应
         c.JSON(500, map[string]string{
-            "error":   "Internal server error",
-            "message": "Something went wrong",
+            "error":   "内部服务器错误",
+            "message": "出了点问题",
         })
     })
     
-    app.Use(goxpress.Recover()) // Converts panics to errors
+    app.Use(goxpress.Recover()) // 将 panic 转换为错误
     
     app.GET("/error", func(c *goxpress.Context) {
-        // This will trigger the error handler
-        c.Next(fmt.Errorf("something went wrong"))
+        // 这将触发错误处理器
+        c.Next(fmt.Errorf("出了点问题"))
     })
     
     app.GET("/panic", func(c *goxpress.Context) {
-        // This will be caught by Recover middleware
-        panic("deliberate panic")
+        // 这将被 Recover 中间件捕获
+        panic("故意 panic")
     })
     
     app.Listen(":8080", nil)
 }
 ```
 
-#### Custom Error Types
-
-```go
-type APIError struct {
-    Code    int    `json:"code"`
-    Message string `json:"message"`
-    Details string `json:"details,omitempty"`
-}
-
-func (e APIError) Error() string {
-    return e.Message
-}
-
-func handleAPIError(err error, c *goxpress.Context) {
-    if apiErr, ok := err.(APIError); ok {
-        c.JSON(apiErr.Code, apiErr)
-        return
-    }
-    
-    // Default error response
-    c.JSON(500, APIError{
-        Code:    500,
-        Message: "Internal server error",
-    })
-}
-
-func main() {
-    app := goxpress.New()
-    app.UseError(handleAPIError)
-    
-    app.GET("/user/:id", func(c *goxpress.Context) {
-        id := c.Param("id")
-        
-        if id == "" {
-            c.Next(APIError{
-                Code:    400,
-                Message: "User ID is required",
-                Details: "Please provide a valid user ID in the URL",
-            })
-            return
-        }
-        
-        // Simulate user not found
-        if id == "999" {
-            c.Next(APIError{
-                Code:    404,
-                Message: "User not found",
-                Details: "No user exists with the provided ID",
-            })
-            return
-        }
-        
-        c.JSON(200, map[string]string{"user_id": id})
-    })
-    
-    app.Listen(":8080", nil)
-}
-```
-
-### 6. Complete REST API Example
+### 6. 完整的 REST API 示例
 
 ```go
 package main
@@ -488,15 +429,15 @@ var nextID = 3
 func main() {
     app := goxpress.New()
     
-    // Middleware
+    // 中间件
     app.Use(goxpress.Logger())
     app.Use(goxpress.Recover())
     app.Use(CORSMiddleware())
     
-    // API routes
+    // API 路由
     api := app.Route("/api")
     
-    // Users CRUD
+    // 用户 CRUD
     api.GET("/users", listUsers)
     api.GET("/users/:id", getUser)
     api.POST("/users", createUser)
@@ -504,8 +445,8 @@ func main() {
     api.DELETE("/users/:id", deleteUser)
     
     app.Listen(":8080", func() {
-        fmt.Println("🚀 Server running on http://localhost:8080")
-        fmt.Println("📖 Try: curl http://localhost:8080/api/users")
+        fmt.Println("🚀 服务器运行在 http://localhost:8080")
+        fmt.Println("📖 试试: curl http://localhost:8080/api/users")
     })
 }
 
@@ -519,7 +460,7 @@ func listUsers(c *goxpress.Context) {
 func getUser(c *goxpress.Context) {
     id, err := strconv.Atoi(c.Param("id"))
     if err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid user ID"})
+        c.JSON(400, map[string]string{"error": "无效的用户 ID"})
         return
     }
     
@@ -530,13 +471,13 @@ func getUser(c *goxpress.Context) {
         }
     }
     
-    c.JSON(404, map[string]string{"error": "User not found"})
+    c.JSON(404, map[string]string{"error": "用户未找到"})
 }
 
 func createUser(c *goxpress.Context) {
     var newUser User
     if err := c.BindJSON(&newUser); err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid JSON"})
+        c.JSON(400, map[string]string{"error": "无效的 JSON"})
         return
     }
     
@@ -550,13 +491,13 @@ func createUser(c *goxpress.Context) {
 func updateUser(c *goxpress.Context) {
     id, err := strconv.Atoi(c.Param("id"))
     if err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid user ID"})
+        c.JSON(400, map[string]string{"error": "无效的用户 ID"})
         return
     }
     
     var updatedUser User
     if err := c.BindJSON(&updatedUser); err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid JSON"})
+        c.JSON(400, map[string]string{"error": "无效的 JSON"})
         return
     }
     
@@ -569,25 +510,25 @@ func updateUser(c *goxpress.Context) {
         }
     }
     
-    c.JSON(404, map[string]string{"error": "User not found"})
+    c.JSON(404, map[string]string{"error": "用户未找到"})
 }
 
 func deleteUser(c *goxpress.Context) {
     id, err := strconv.Atoi(c.Param("id"))
     if err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid user ID"})
+        c.JSON(400, map[string]string{"error": "无效的用户 ID"})
         return
     }
     
     for i, user := range users {
         if user.ID == id {
             users = append(users[:i], users[i+1:]...)
-            c.JSON(200, map[string]string{"message": "User deleted"})
+            c.JSON(200, map[string]string{"message": "用户已删除"})
             return
         }
     }
     
-    c.JSON(404, map[string]string{"error": "User not found"})
+    c.JSON(404, map[string]string{"error": "用户未找到"})
 }
 
 func CORSMiddleware() goxpress.HandlerFunc {
@@ -606,52 +547,52 @@ func CORSMiddleware() goxpress.HandlerFunc {
 }
 ```
 
-## Performance
+## 性能
 
-goxpress delivers excellent performance while maintaining developer productivity:
+goxpress 在保持开发者生产力的同时提供出色的性能：
 
-### Benchmarks
+### 基准测试
 
-- **Simple requests**: ~1.8M requests/sec
-- **JSON responses**: ~1.2M requests/sec  
-- **Path parameters**: ~1M requests/sec
-- **Route matching**: Ultra-fast with Radix Tree algorithm
+- **简单请求**: ~180万 请求/秒
+- **JSON 响应**: ~120万 请求/秒  
+- **路径参数**: ~100万 请求/秒
+- **路由匹配**: 使用 Radix Tree 算法实现超快匹配
 
-### The Real Performance Story
+### 真实的性能故事
 
-**90% of the time, your web service performance is NOT determined by the framework you choose.**
+**90% 的情况下，你的 Web 服务性能不是由你选择的框架决定的。**
 
-The real bottlenecks in most applications are:
+大多数应用的真正瓶颈是：
 
-- **Database queries** - Slow SQL, missing indexes, N+1 queries
-- **External API calls** - Network latency, third-party service limits  
-- **Business logic** - Complex calculations, inefficient algorithms
-- **Infrastructure** - Network bandwidth, server resources, caching
+- **数据库查询** - 慢 SQL、缺少索引、N+1 查询
+- **外部 API 调用** - 网络延迟、第三方服务限制  
+- **业务逻辑** - 复杂计算、低效算法
+- **基础设施** - 网络带宽、服务器资源、缓存
 
-**Even switching to a framework 5x faster will have minimal impact on overall response time.**
+**即使切换到快 5 倍的框架，对整体响应时间的影响也微乎其微。**
 
-Focus your optimization efforts where they matter:
+将优化工作重点放在真正重要的地方：
 
-1. **Database optimization** - Proper indexing, query optimization
-2. **Caching strategies** - Redis, in-memory caches, CDNs
-3. **API design** - Pagination, bulk operations, efficient data structures
-4. **Infrastructure** - Load balancing, proper resource allocation
+1. **数据库优化** - 适当的索引、查询优化
+2. **缓存策略** - Redis、内存缓存、CDN
+3. **API 设计** - 分页、批量操作、高效的数据结构
+4. **基础设施** - 负载均衡、适当的资源分配
 
-goxpress gives you excellent performance out of the box, so you can focus on building great features instead of micro-optimizing framework overhead.
+goxpress 开箱即用就提供出色的性能，所以你可以专注于构建优秀的功能，而不是微优化框架开销。
 
-## API Reference
+## API 参考
 
-### Core Types
+### 核心类型
 
 ```go
 type HandlerFunc func(*Context)
 type ErrorHandlerFunc func(error, *Context)
 ```
 
-### Engine Methods
+### Engine 方法
 
 ```go
-// HTTP Methods
+// HTTP 方法
 app.GET(pattern string, handlers ...HandlerFunc) *Engine
 app.POST(pattern string, handlers ...HandlerFunc) *Engine  
 app.PUT(pattern string, handlers ...HandlerFunc) *Engine
@@ -660,48 +601,48 @@ app.PATCH(pattern string, handlers ...HandlerFunc) *Engine
 app.HEAD(pattern string, handlers ...HandlerFunc) *Engine
 app.OPTIONS(pattern string, handlers ...HandlerFunc) *Engine
 
-// Middleware
+// 中间件
 app.Use(middleware ...HandlerFunc) *Engine
 app.UseError(handlers ...ErrorHandlerFunc) *Engine
 
-// Route Groups
+// 路由组
 app.Route(prefix string) *Router
 
-// Server
+// 服务器
 app.Listen(addr string, callback func()) error
 app.ListenTLS(addr, certFile, keyFile string, callback func()) error
 ```
 
-### Context Methods
+### Context 方法
 
 ```go
-// Parameters and Query
+// 参数和查询
 c.Param(key string) string
 c.Query(key string) string
 
-// Request Body
+// 请求主体
 c.BindJSON(obj interface{}) error
 
-// Response
+// 响应
 c.Status(code int)
 c.String(code int, format string, values ...interface{}) error
 c.JSON(code int, obj interface{}) error
 
-// Flow Control
+// 流程控制
 c.Next(err ...error)
 c.Abort()
 c.IsAborted() bool
 
-// Data Storage
+// 数据存储
 c.Set(key string, value interface{})
 c.Get(key string) (interface{}, bool)
 c.GetString(key string) (string, bool)
 c.MustGet(key string) interface{}
 ```
 
-## Advanced Usage
+## 高级用法
 
-### Custom Middleware
+### 自定义中间件
 
 ```go
 func TimingMiddleware() goxpress.HandlerFunc {
@@ -716,21 +657,21 @@ func TimingMiddleware() goxpress.HandlerFunc {
 }
 ```
 
-### Route Patterns
+### 路由模式
 
 ```go
-// Static routes
+// 静态路由
 app.GET("/users", handler)
 
-// Parameters
+// 参数
 app.GET("/users/:id", handler)           // /users/123
 app.GET("/users/:id/posts/:postId", handler) // /users/123/posts/456
 
-// Wildcards  
+// 通配符  
 app.GET("/files/*filepath", handler)     // /files/css/style.css
 ```
 
-### Testing
+### 测试
 
 ```go
 func TestAPI(t *testing.T) {
@@ -748,26 +689,26 @@ func TestAPI(t *testing.T) {
 }
 ```
 
-## Contributing
+## 贡献
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+我们欢迎贡献！请查看我们的[贡献指南](CONTRIBUTING.md)了解详情。
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork 仓库
+2. 创建你的特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交你的更改 (`git commit -m 'Add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 打开一个 Pull Request
 
-## License
+## 许可证
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+此项目根据 MIT 许可证授权 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-## Acknowledgments
+## 致谢
 
-- Inspired by [Express.js](https://expressjs.com/) for its elegant API design
-- Built with ❤️ for the Go community
-- Special thanks to all contributors
+- 受 [Express.js](https://expressjs.com/) 启发，因其优雅的 API 设计
+- 用 ❤️ 为 Go 社区构建
+- 特别感谢所有贡献者
 
 ---
 
-**Happy coding with goxpress!** 🚀
+**使用 goxpress 愉快编码！** 🚀

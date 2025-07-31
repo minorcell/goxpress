@@ -1,276 +1,445 @@
-// Package relay_test 提供 relay 框架的测试
-// 定位：Router 和路由功能测试
-// 作用：测试 Router 的路由注册、匹配和路由组功能
-// 使用方法：使用 go test 命令运行测试
-package relay_test
+package goxpress
 
 import (
 	"net/http/httptest"
 	"testing"
-
-	"relay"
 )
 
-// TestRouterNew 测试 Router 的创建
-// 定位：Router 构造函数测试
-// 作用：验证 NewRouter() 函数是否正确创建 Router 实例
-// 使用方法：go test -run TestRouterNew
-func TestRouterNew(t *testing.T) {
-	router := relay.NewRouter()
-
+func TestNewRouter(t *testing.T) {
+	router := NewRouter()
 	if router == nil {
-		t.Error("Expected router to be created, but got nil")
+		t.Fatal("NewRouter() should return a valid Router instance")
+	}
+	if router.subRouters == nil {
+		t.Fatal("Router should have subRouters map initialized")
+	}
+	if router.routes == nil {
+		t.Fatal("Router should have routes map initialized")
 	}
 }
 
-// TestRouterUse 测试路由器中间件注册功能
-// 定位：路由器中间件注册测试
-// 作用：验证 Use() 方法是否正确注册中间件
-// 使用方法：go test -run TestRouterUse
-func TestRouterUse(t *testing.T) {
-	router := relay.NewRouter()
-
-	// 创建一个简单的测试中间件
-	middleware := func(c *relay.Context) {}
-
-	// 注册中间件
-	result := router.Use(middleware)
-
-	// 验证返回值是否正确（支持链式调用）
-	if result != router {
-		t.Error("Expected Use() to return router for chaining")
-	}
-}
-
-// TestRouterGroup 测试路由组功能
-// 定位：路由组测试
-// 作用：验证 Group() 方法是否正确创建路由组
-// 使用方法：go test -run TestRouterGroup
-func TestRouterGroup(t *testing.T) {
-	router := relay.NewRouter()
-
-	group := router.Group("/api")
-
-	if group == nil {
-		t.Error("Expected Group() to return a router")
-	}
-
-	// 验证前缀是否正确设置
-	// 注意：由于 prefix 字段是私有的，我们无法直接访问它
-	// 但在实际使用中，这个前缀会被用于路由匹配
-}
-
-// TestRouterHTTPMethods 测试路由器的 HTTP 方法路由注册
-// 定位：路由器 HTTP 方法路由注册测试
-// 作用：验证路由器各种 HTTP 方法的路由注册功能
-// 使用方法：go test -run TestRouterHTTPMethods
 func TestRouterHTTPMethods(t *testing.T) {
-	router := relay.NewRouter()
+	router := NewRouter()
+	handler := func(c *Context) { c.String(200, "OK") }
 
-	// 测试处理函数
-	handler := func(c *relay.Context) {}
-
-	// 测试各种 HTTP 方法
-	methods := []func(string, ...relay.HandlerFunc) *relay.Router{
-		router.GET,
-		router.POST,
-		router.PUT,
-		router.PATCH,
-		router.DELETE,
-		router.HEAD,
-		router.OPTIONS,
+	methods := []struct {
+		name   string
+		method func(string, ...HandlerFunc) *Router
+		verb   string
+	}{
+		{"GET", router.GET, "GET"},
+		{"POST", router.POST, "POST"},
+		{"PUT", router.PUT, "PUT"},
+		{"DELETE", router.DELETE, "DELETE"},
+		{"PATCH", router.PATCH, "PATCH"},
+		{"HEAD", router.HEAD, "HEAD"},
+		{"OPTIONS", router.OPTIONS, "OPTIONS"},
 	}
 
-	for _, method := range methods {
-		result := method("/test", handler)
-		if result != router {
-			t.Error("Expected HTTP method functions to return router for chaining")
-		}
+	for _, m := range methods {
+		t.Run(m.name, func(t *testing.T) {
+			result := m.method("/test", handler)
+			if result != router {
+				t.Errorf("%s() should return the same Router instance for chaining", m.name)
+			}
+
+			// Verify the route was registered
+			_, exists := router.routes[m.verb]
+			if !exists {
+				t.Errorf("Route tree for %s method should exist", m.verb)
+				return
+			}
+
+			node, _ := router.getRoute(m.verb, "/test")
+			if node == nil {
+				t.Errorf("Route /test should be registered for %s method", m.verb)
+			}
+		})
 	}
 }
 
-// TestRouterStaticRoutes 测试静态路由匹配
-// 定位：静态路由匹配测试
-// 作用：验证路由器是否正确匹配静态路由
-// 使用方法：go test -run TestRouterStaticRoutes
 func TestRouterStaticRoutes(t *testing.T) {
-	engine := relay.New()
+	router := NewRouter()
 
-	// 注册静态路由
-	called := false
-	engine.GET("/users", func(c *relay.Context) {
-		called = true
-		c.String(200, "users")
-	})
+	router.GET("/", func(c *Context) { c.String(200, "root") })
+	router.GET("/hello", func(c *Context) { c.String(200, "hello") })
+	router.GET("/hello/world", func(c *Context) { c.String(200, "hello world") })
 
-	// 创建请求
-	req := httptest.NewRequest("GET", "/users", nil)
-	w := httptest.NewRecorder()
-
-	// 处理请求
-	engine.ServeHTTP(w, req)
-
-	// 验证路由是否匹配
-	if !called {
-		t.Error("Expected handler to be called for static route")
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"/", true},
+		{"/hello", true},
+		{"/hello/world", true},
+		{"/notfound", false},
+		{"/hello/notfound", false},
 	}
 
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, but got %d", w.Code)
-	}
-}
-
-// TestRouterDynamicRoutes 测试动态路由匹配
-// 定位：动态路由匹配测试
-// 作用：验证路由器是否正确匹配包含参数的动态路由
-// 使用方法：go test -run TestRouterDynamicRoutes
-func TestRouterDynamicRoutes(t *testing.T) {
-	engine := relay.New()
-
-	// 注册动态路由
-	var id string
-	engine.GET("/users/:id", func(c *relay.Context) {
-		id = c.Param("id")
-		c.String(200, "user %s", id)
-	})
-
-	// 创建请求
-	req := httptest.NewRequest("GET", "/users/123", nil)
-	w := httptest.NewRecorder()
-
-	// 处理请求
-	engine.ServeHTTP(w, req)
-
-	// 验证路由是否匹配且参数正确
-	if id != "123" {
-		t.Errorf("Expected id to be '123', but got '%s'", id)
-	}
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, but got %d", w.Code)
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			node, _ := router.getRoute("GET", test.path)
+			if test.expected && node == nil {
+				t.Errorf("Expected route %s to be found", test.path)
+			}
+			if !test.expected && node != nil {
+				t.Errorf("Expected route %s to not be found", test.path)
+			}
+		})
 	}
 }
 
-// TestRouterWildcardRoutes 测试通配符路由匹配
-// 定位：通配符路由匹配测试
-// 作用：验证路由器是否正确匹配包含通配符的路由
-// 使用方法：go test -run TestRouterWildcardRoutes
-func TestRouterWildcardRoutes(t *testing.T) {
-	engine := relay.New()
+func TestRouterParameterRoutes(t *testing.T) {
+	router := NewRouter()
 
-	// 注册通配符路由
-	var path string
-	engine.GET("/static/*filepath", func(c *relay.Context) {
-		path = c.Param("filepath")
-		c.String(200, "file %s", path)
-	})
+	router.GET("/users/:id", func(c *Context) { c.String(200, "user") })
+	router.GET("/users/:id/posts/:postId", func(c *Context) { c.String(200, "post") })
+	router.GET("/files/*filepath", func(c *Context) { c.String(200, "file") })
 
-	// 创建请求
-	req := httptest.NewRequest("GET", "/static/css/style.css", nil)
-	w := httptest.NewRecorder()
-
-	// 处理请求
-	engine.ServeHTTP(w, req)
-
-	// 验证路由是否匹配且参数正确
-	if path != "css/style.css" {
-		t.Errorf("Expected path to be 'css/style.css', but got '%s'", path)
+	tests := []struct {
+		path           string
+		expectedFound  bool
+		expectedParams map[string]string
+	}{
+		{
+			path:           "/users/123",
+			expectedFound:  true,
+			expectedParams: map[string]string{"id": "123"},
+		},
+		{
+			path:           "/users/abc",
+			expectedFound:  true,
+			expectedParams: map[string]string{"id": "abc"},
+		},
+		{
+			path:           "/users/123/posts/456",
+			expectedFound:  true,
+			expectedParams: map[string]string{"id": "123", "postId": "456"},
+		},
+		{
+			path:           "/files/images/avatar.png",
+			expectedFound:  true,
+			expectedParams: map[string]string{"filepath": "images/avatar.png"},
+		},
+		{
+			path:           "/users",
+			expectedFound:  false,
+			expectedParams: nil,
+		},
 	}
 
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, but got %d", w.Code)
-	}
-}
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			node, params := router.getRoute("GET", test.path)
 
-// TestRouterComplexRoutes 测试复杂路由匹配
-// 定位：复杂路由匹配测试
-// 作用：验证路由器是否正确匹配包含多个参数和静态段的复杂路由
-// 使用方法：go test -run TestRouterComplexRoutes
-func TestRouterComplexRoutes(t *testing.T) {
-	engine := relay.New()
+			if test.expectedFound && node == nil {
+				t.Errorf("Expected route %s to be found", test.path)
+				return
+			}
+			if !test.expectedFound && node != nil {
+				t.Errorf("Expected route %s to not be found", test.path)
+				return
+			}
 
-	// 注册复杂路由
-	var lang, section, id string
-	engine.GET("/docs/:lang/:section/:id", func(c *relay.Context) {
-		lang = c.Param("lang")
-		section = c.Param("section")
-		id = c.Param("id")
-		c.String(200, "doc %s/%s/%s", lang, section, id)
-	})
+			if test.expectedFound {
+				if len(params) != len(test.expectedParams) {
+					t.Errorf("Expected %d parameters, got %d", len(test.expectedParams), len(params))
+					return
+				}
 
-	// 创建请求
-	req := httptest.NewRequest("GET", "/docs/en/getting-started/installation", nil)
-	w := httptest.NewRecorder()
-
-	// 处理请求
-	engine.ServeHTTP(w, req)
-
-	// 验证路由是否匹配且参数正确
-	if lang != "en" {
-		t.Errorf("Expected lang to be 'en', but got '%s'", lang)
-	}
-
-	if section != "getting-started" {
-		t.Errorf("Expected section to be 'getting-started', but got '%s'", section)
-	}
-
-	if id != "installation" {
-		t.Errorf("Expected id to be 'installation', but got '%s'", id)
-	}
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, but got %d", w.Code)
+				for key, expectedValue := range test.expectedParams {
+					if actualValue, exists := params[key]; !exists {
+						t.Errorf("Expected parameter %s to exist", key)
+					} else if actualValue != expectedValue {
+						t.Errorf("Expected parameter %s = %s, got %s", key, expectedValue, actualValue)
+					}
+				}
+			}
+		})
 	}
 }
 
-// TestRouterMethodSpecificity 测试路由方法特异性
-// 定位：路由方法特异性测试
-// 作用：验证路由器是否正确区分不同 HTTP 方法的相同路径
-// 使用方法：go test -run TestRouterMethodSpecificity
-func TestRouterMethodSpecificity(t *testing.T) {
-	engine := relay.New()
+func TestRouterGroups(t *testing.T) {
+	router := NewRouter()
 
-	// 注册相同路径的不同方法
-	getCalled := false
-	postCalled := false
+	// Create a group
+	api := router.Group("/api")
+	if api == nil {
+		t.Fatal("Group() should return a valid Router instance")
+	}
 
-	engine.GET("/users", func(c *relay.Context) {
-		getCalled = true
-		c.String(200, "get users")
+	// Add routes to the group
+	api.GET("/users", func(c *Context) { c.String(200, "users") })
+	api.POST("/users", func(c *Context) { c.String(201, "create user") })
+
+	// Test the grouped routes
+	tests := []struct {
+		method string
+		path   string
+		found  bool
+	}{
+		{"GET", "/api/users", true},
+		{"POST", "/api/users", true},
+		{"GET", "/users", false},
+		{"POST", "/users", false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.method+" "+test.path, func(t *testing.T) {
+			node, _ := router.getRoute(test.method, test.path)
+			if test.found && node == nil {
+				t.Errorf("Expected route %s %s to be found", test.method, test.path)
+			}
+			if !test.found && node != nil {
+				t.Errorf("Expected route %s %s to not be found", test.method, test.path)
+			}
+		})
+	}
+}
+
+func TestRouterNestedGroups(t *testing.T) {
+	router := NewRouter()
+
+	// Create nested groups
+	api := router.Group("/api")
+	v1 := api.Group("/v1")
+	v1.GET("/users", func(c *Context) { c.String(200, "v1 users") })
+
+	// Test nested group route
+	node, _ := router.getRoute("GET", "/api/v1/users")
+	if node == nil {
+		t.Error("Expected nested group route /api/v1/users to be found")
+	}
+}
+
+func TestRouterMultipleHandlers(t *testing.T) {
+	router := NewRouter()
+
+	handler1 := func(c *Context) { c.Next() }
+	handler2 := func(c *Context) { c.String(200, "OK") }
+
+	router.GET("/test", handler1, handler2)
+
+	node, _ := router.getRoute("GET", "/test")
+	if node == nil {
+		t.Fatal("Expected route /test to be found")
+	}
+
+	if len(node.handlers) != 2 {
+		t.Errorf("Expected 2 handlers, got %d", len(node.handlers))
+	}
+}
+
+func TestRouterConflictingRoutes(t *testing.T) {
+	router := NewRouter()
+
+	// Add static route first
+	router.GET("/users/new", func(c *Context) { c.String(200, "new user form") })
+
+	// Add parameter route
+	router.GET("/users/:id", func(c *Context) { c.String(200, "user detail") })
+
+	// Static route should take precedence
+	node, params := router.getRoute("GET", "/users/new")
+	if node == nil {
+		t.Error("Expected static route /users/new to be found")
+	}
+	if len(params) != 0 {
+		t.Error("Static route should not have parameters")
+	}
+
+	// Parameter route should still work for other paths
+	node, params = router.getRoute("GET", "/users/123")
+	if node == nil {
+		t.Error("Expected parameter route /users/:id to be found")
+	}
+	if params["id"] != "123" {
+		t.Errorf("Expected parameter id = 123, got %s", params["id"])
+	}
+}
+
+func TestParsePattern(t *testing.T) {
+	tests := []struct {
+		pattern  string
+		expected []string
+	}{
+		{"/", []string{}},
+		{"/hello", []string{"hello"}},
+		{"/users/:id", []string{"users", ":id"}},
+		{"/api/v1/users/:id/posts/:postId", []string{"api", "v1", "users", ":id", "posts", ":postId"}},
+		{"/files/*filepath", []string{"files", "*filepath"}},
+		{"//double//slashes//", []string{"double", "slashes"}},
+		{"/trailing/slash/", []string{"trailing", "slash"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.pattern, func(t *testing.T) {
+			result := parsePattern(test.pattern)
+			if len(result) != len(test.expected) {
+				t.Errorf("Expected %d parts, got %d", len(test.expected), len(result))
+				return
+			}
+
+			for i, expected := range test.expected {
+				if result[i] != expected {
+					t.Errorf("Expected part[%d] = %s, got %s", i, expected, result[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRouterTreeBasicOperations(t *testing.T) {
+	router := NewRouter()
+	handler := func(c *Context) { c.String(200, "OK") }
+
+	// Test adding routes
+	router.GET("/users", handler)
+	router.GET("/users/:id", handler)
+	router.GET("/posts/*filepath", handler)
+
+	// Test searching routes
+	tests := []struct {
+		path           string
+		expectedFound  bool
+		expectedParams map[string]string
+	}{
+		{"/users", true, map[string]string{}},
+		{"/users/123", true, map[string]string{"id": "123"}},
+		{"/posts/2023/article.html", true, map[string]string{"filepath": "2023/article.html"}},
+		{"/notfound", false, nil},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			node, params := router.getRoute("GET", test.path)
+
+			if test.expectedFound && node == nil {
+				t.Errorf("Expected route %s to be found", test.path)
+				return
+			}
+			if !test.expectedFound && node != nil {
+				t.Errorf("Expected route %s to not be found", test.path)
+				return
+			}
+
+			if test.expectedFound && len(params) != len(test.expectedParams) {
+				t.Errorf("Expected %d parameters, got %d", len(test.expectedParams), len(params))
+			}
+		})
+	}
+}
+
+func TestRouterConcurrency(t *testing.T) {
+	router := NewRouter()
+
+	// Add some routes
+	router.GET("/users/:id", func(c *Context) { c.String(200, "user") })
+	router.POST("/users", func(c *Context) { c.String(201, "create") })
+
+	// Test concurrent access
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			defer func() { done <- true }()
+
+			// Each goroutine performs route lookups
+			for j := 0; j < 100; j++ {
+				node, params := router.getRoute("GET", "/users/123")
+				if node == nil {
+					t.Errorf("Goroutine %d: Expected route to be found", id)
+					return
+				}
+				if params["id"] != "123" {
+					t.Errorf("Goroutine %d: Expected id = 123, got %s", id, params["id"])
+					return
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+}
+
+func BenchmarkRouterStaticRoute(b *testing.B) {
+	router := NewRouter()
+	router.GET("/api/v1/users", func(c *Context) { c.String(200, "OK") })
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		router.getRoute("GET", "/api/v1/users")
+	}
+}
+
+func BenchmarkRouterParamRoute(b *testing.B) {
+	router := NewRouter()
+	router.GET("/users/:id/posts/:postId", func(c *Context) { c.String(200, "OK") })
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		router.getRoute("GET", "/users/123/posts/456")
+	}
+}
+
+func BenchmarkRouterWildcardRoute(b *testing.B) {
+	router := NewRouter()
+	router.GET("/files/*filepath", func(c *Context) { c.String(200, "OK") })
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		router.getRoute("GET", "/files/images/avatars/user123.png")
+	}
+}
+
+func BenchmarkParsePattern(b *testing.B) {
+	pattern := "/api/v1/users/:id/posts/:postId/comments/*commentPath"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		parsePattern(pattern)
+	}
+}
+
+// Integration test with HTTP server
+func TestRouterHTTPIntegration(t *testing.T) {
+	router := NewRouter()
+
+	router.GET("/hello/:name", func(c *Context) {
+		name := c.Param("name")
+		c.JSON(200, map[string]string{"message": "Hello " + name})
 	})
 
-	engine.POST("/users", func(c *relay.Context) {
-		postCalled = true
-		c.String(200, "post users")
-	})
-
-	// 测试 GET 请求
-	req := httptest.NewRequest("GET", "/users", nil)
+	// Create a test request
+	req := httptest.NewRequest("GET", "/hello/world", nil)
 	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
 
-	if !getCalled {
-		t.Error("Expected GET handler to be called")
+	// Simulate the engine's ServeHTTP behavior
+	node, params := router.getRoute(req.Method, req.URL.Path)
+	if node == nil {
+		t.Fatal("Route should be found")
 	}
 
-	if postCalled {
-		t.Error("Expected POST handler not to be called for GET request")
+	// Create context and execute handlers
+	c := NewContext(w, req)
+	c.params = params
+	c.handlers = node.handlers
+	c.Next()
+
+	if w.Code != 200 {
+		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	// 重置标志
-	getCalled = false
-	postCalled = false
-
-	// 测试 POST 请求
-	req = httptest.NewRequest("POST", "/users", nil)
-	w = httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-
-	if !postCalled {
-		t.Error("Expected POST handler to be called")
+	expected := `{"message":"Hello world"}`
+	actual := w.Body.String()
+	// Remove trailing newline from JSON encoder
+	if actual[len(actual)-1] == '\n' {
+		actual = actual[:len(actual)-1]
 	}
 
-	if getCalled {
-		t.Error("Expected GET handler not to be called for POST request")
+	if actual != expected {
+		t.Errorf("Expected response %s, got %s", expected, actual)
 	}
 }

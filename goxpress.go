@@ -1,12 +1,12 @@
-// Package relay 是一个类似 Express.js 的 Go Web 框架
+// Package goxpress 是一个类似 Express.js 的 Go Web 框架
 // 定位：框架的核心引擎，负责协调路由、中间件和请求处理
 // 作用：实现 http.Handler 接口，管理路由和中间件，提供 HTTP 服务启动功能
 // 使用方法：
-//  1. 创建引擎实例：app := relay.New()
+//  1. 创建引擎实例：app := goxpress.New()
 //  2. 注册中间件：app.Use(middleware)
 //  3. 定义路由：app.GET("/path", handler)
 //  4. 启动服务：app.Listen(":8080", nil)
-package relay
+package goxpress
 
 import (
 	"net/http"
@@ -24,7 +24,7 @@ type HandlerFunc func(*Context)
 // 使用方法：实现此函数类型，接收 error 和 *Context 参数，处理错误逻辑
 type ErrorHandlerFunc func(error, *Context)
 
-// Engine 是 relay 框架的主要结构体
+// Engine 是 goxpress 框架的主要结构体
 // 定位：框架的核心引擎，协调所有组件
 // 作用：
 //  1. 实现 http.Handler 接口
@@ -33,7 +33,7 @@ type ErrorHandlerFunc func(error, *Context)
 //  4. 管理错误处理中间件
 //
 // 使用方法：
-//  1. 通过 relay.New() 创建实例
+//  1. 通过 goxpress.New() 创建实例
 //  2. 使用 Use() 方法注册中间件
 //  3. 使用 UseError() 方法注册错误处理中间件
 //  4. 使用 HTTP 方法函数（GET/POST等）定义路由
@@ -44,13 +44,15 @@ type Engine struct {
 	errorHandlers []ErrorHandlerFunc // 错误处理中间件列表
 }
 
-// New 创建一个新的 relay 引擎实例
+// New 创建一个新的 goxpress 引擎实例
 // 定位：Engine 结构体的构造函数
 // 作用：初始化 Engine 实例及其依赖组件
-// 使用方法：app := relay.New()
+// 使用方法：app := goxpress.New()
 func New() *Engine {
 	engine := &Engine{
-		router: NewRouter(),
+		router:        NewRouter(),
+		middlewares:   make([]HandlerFunc, 0),
+		errorHandlers: make([]ErrorHandlerFunc, 0),
 	}
 	return engine
 }

@@ -1,11 +1,11 @@
-// Package relay 是一个类似 Express.js 的 Go Web 框架
+// Package goxpress 是一个类似 Express.js 的 Go Web 框架
 // 定位：路由管理模块
 // 作用：实现基于 Radix Tree 的高效路由匹配算法，管理路由和路由组
 // 使用方法：
-//  1. 通过 relay.NewRouter() 创建路由器实例
+//  1. 通过 goxpress.NewRouter() 创建路由器实例
 //  2. 使用 router.GET() 等方法注册路由
 //  3. 使用 router.Group() 创建路由组
-package relay
+package goxpress
 
 import (
 	"strings"

@@ -1,345 +1,572 @@
-// Package relay_test 提供 relay 框架的测试
-// 定位：Context 功能测试
-// 作用：测试 Context 的各种方法和功能
-// 使用方法：使用 go test 命令运行测试
-package relay_test
+package goxpress
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"relay"
 )
 
-// TestContextNew 测试 Context 的创建
-// 定位：Context 构造函数测试
-// 作用：验证 NewContext() 函数是否正确创建 Context 实例
-// 使用方法：go test -run TestContextNew
-func TestContextNew(t *testing.T) {
-	req := httptest.NewRequest("GET", "/", nil)
+func TestNewContext(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 
-	c := relay.NewContext(w, req)
+	c := NewContext(w, req)
 
 	if c == nil {
-		t.Error("Expected context to be created, but got nil")
+		t.Fatal("NewContext should return a valid Context instance")
 	}
 
 	if c.Request != req {
-		t.Error("Expected context request to match input request")
+		t.Error("Context should have the correct request")
 	}
 
 	if c.Response != w {
-		t.Error("Expected context response to match input response")
+		t.Error("Context should have the correct response writer")
+	}
+
+	if c.params == nil {
+		t.Error("Context should have params map initialized")
+	}
+
+	if c.store == nil {
+		t.Error("Context should have store map initialized")
+	}
+
+	if c.index != -1 {
+		t.Errorf("Context index should be -1, got %d", c.index)
+	}
+
+	if c.aborted {
+		t.Error("Context should not be aborted initially")
+	}
+
+	if c.statusCodeWritten {
+		t.Error("Context should not have status code written initially")
 	}
 }
 
-// TestContextParam 测试参数获取功能
-// 定位：URL 参数获取测试
-// 作用：验证 Param() 方法是否正确获取 URL 参数
-// 使用方法：go test -run TestContextParam
+func TestContextReset(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	// Set some data
+	c.params["id"] = "123"
+	c.store["user"] = "john"
+	c.index = 5
+	c.aborted = true
+	c.statusCodeWritten = true
+	c.err = fmt.Errorf("test error")
+
+	// Reset the context
+	c.reset()
+
+	if len(c.params) != 0 {
+		t.Error("Params should be empty after reset")
+	}
+
+	if len(c.store) != 0 {
+		t.Error("Store should be empty after reset")
+	}
+
+	if c.index != -1 {
+		t.Errorf("Index should be -1 after reset, got %d", c.index)
+	}
+
+	if c.aborted {
+		t.Error("Context should not be aborted after reset")
+	}
+
+	if c.statusCodeWritten {
+		t.Error("Status code written should be false after reset")
+	}
+
+	if c.err != nil {
+		t.Error("Error should be nil after reset")
+	}
+}
+
 func TestContextParam(t *testing.T) {
-	// 由于 params 是私有字段，我们通过实际路由测试来验证
-	engine := relay.New()
-	var paramValue string
-
-	engine.GET("/users/:id", func(c *relay.Context) {
-		paramValue = c.Param("id")
-		c.String(200, "user %s", paramValue)
-	})
-
-	// 创建带参数的请求
 	req := httptest.NewRequest("GET", "/users/123", nil)
 	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
 
-	if paramValue != "123" {
-		t.Errorf("Expected Param() to return '123', but got '%s'", paramValue)
-	}
-}
-
-// TestContextQuery 测试查询参数获取功能
-// 定位：查询参数获取测试
-// 作用：验证 Query() 方法是否正确获取查询参数
-// 使用方法：go test -run TestContextQuery
-func TestContextQuery(t *testing.T) {
-	req := httptest.NewRequest("GET", "/?name=john&age=25", nil)
-	w := httptest.NewRecorder()
-
-	c := relay.NewContext(w, req)
-
-	if c.Query("name") != "john" {
-		t.Error("Expected Query() to return correct name value")
+	c := NewContext(w, req)
+	c.params = map[string]string{
+		"id":   "123",
+		"name": "john",
 	}
 
-	if c.Query("age") != "25" {
-		t.Error("Expected Query() to return correct age value")
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		{"id", "123"},
+		{"name", "john"},
+		{"nonexistent", ""},
 	}
 
-	if c.Query("nonexistent") != "" {
-		t.Error("Expected Query() to return empty string for nonexistent key")
-	}
-}
-
-// TestContextStatus 测试状态码设置功能
-// 定位：HTTP 状态码设置测试
-// 作用：验证 Status() 方法是否正确设置 HTTP 状态码
-// 使用方法：go test -run TestContextStatus
-func TestContextStatus(t *testing.T) {
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-
-	c := relay.NewContext(w, req)
-	c.Status(404)
-
-	// 注意：由于 httptest.Recorder 的特殊性，我们无法直接验证状态码是否已设置
-	// 但在实际 HTTP 服务器中，这会正确设置响应状态码
-}
-
-// TestContextString 测试字符串响应功能
-// 定位：字符串响应测试
-// 作用：验证 String() 方法是否正确发送字符串响应
-// 使用方法：go test -run TestContextString
-func TestContextString(t *testing.T) {
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-
-	c := relay.NewContext(w, req)
-	err := c.String(200, "Hello %s", "World")
-
-	if err != nil {
-		t.Errorf("Expected String() to not return error, but got %v", err)
-	}
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, but got %d", w.Code)
-	}
-
-	if w.Body.String() != "Hello World" {
-		t.Errorf("Expected body 'Hello World', but got '%s'", w.Body.String())
-	}
-
-	if w.Header().Get("Content-Type") != "text/plain; charset=utf-8" {
-		t.Errorf("Expected Content-Type to be 'text/plain; charset=utf-8', but got '%s'", w.Header().Get("Content-Type"))
-	}
-}
-
-// TestContextJSON 测试 JSON 响应功能
-// 定位：JSON 响应测试
-// 作用：验证 JSON() 方法是否正确发送 JSON 响应
-// 使用方法：go test -run TestContextJSON
-func TestContextJSON(t *testing.T) {
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-
-	c := relay.NewContext(w, req)
-	data := map[string]interface{}{"message": "hello", "code": 200}
-	err := c.JSON(200, data)
-
-	if err != nil {
-		t.Errorf("Expected JSON() to not return error, but got %v", err)
-	}
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, but got %d", w.Code)
-	}
-
-	body := w.Body.String()
-	if !strings.Contains(body, `"message":"hello"`) || !strings.Contains(body, `"code":200`) {
-		t.Errorf("Expected body to contain JSON data, but got '%s'", body)
-	}
-
-	if w.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Expected Content-Type to be 'application/json', but got '%s'", w.Header().Get("Content-Type"))
-	}
-}
-
-// TestContextSetGet 测试上下文数据存储功能
-// 定位：上下文数据存储测试
-// 作用：验证 Set() 和 Get() 方法是否正确存储和获取数据
-// 使用方法：go test -run TestContextSetGet
-func TestContextSetGet(t *testing.T) {
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-
-	c := relay.NewContext(w, req)
-
-	// 测试 Set 和 Get
-	c.Set("key1", "value1")
-
-	if value, exists := c.Get("key1"); !exists {
-		t.Error("Expected Get() to return true for existing key")
-	} else if value != "value1" {
-		t.Errorf("Expected Get() to return 'value1', but got '%v'", value)
-	}
-
-	// 测试不存在的键
-	if _, exists := c.Get("nonexistent"); exists {
-		t.Error("Expected Get() to return false for nonexistent key")
-	}
-
-	// 测试 GetString
-	c.Set("key2", "value2")
-	if value, ok := c.GetString("key2"); !ok {
-		t.Error("Expected GetString() to return true for existing string key")
-	} else if value != "value2" {
-		t.Errorf("Expected GetString() to return 'value2', but got '%s'", value)
-	}
-
-	// 测试非字符串值的 GetString
-	c.Set("key3", 123)
-	if _, ok := c.GetString("key3"); ok {
-		t.Error("Expected GetString() to return false for non-string value")
-	}
-}
-
-// TestContextMustGet 测试 MustGet 功能
-// 定位：强制获取上下文数据测试
-// 作用：验证 MustGet() 方法是否正确获取数据，以及在键不存在时是否 panic
-// 使用方法：go test -run TestContextMustGet
-func TestContextMustGet(t *testing.T) {
-	engine := relay.New()
-
-	var mustGetValue interface{}
-
-	// 创建中间件来测试 MustGet
-	engine.Use(func(c *relay.Context) {
-		c.Set("key", "value")
-		mustGetValue = c.MustGet("key")
-		c.Next()
-	})
-
-	// 注册路由
-	engine.GET("/test", func(c *relay.Context) {
-		c.String(200, "test")
-	})
-
-	// 创建请求
-	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
-
-	// 处理请求
-	engine.ServeHTTP(w, req)
-
-	// 测试正常获取
-	if mustGetValue != "value" {
-		t.Errorf("Expected MustGet() to return 'value', but got '%v'", mustGetValue)
-	}
-
-	// 测试不存在的键（应该 panic）
-	engine2 := relay.New()
-
-	engine2.Use(func(c *relay.Context) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Error("Expected MustGet() to panic for nonexistent key")
+	for _, test := range tests {
+		t.Run(test.key, func(t *testing.T) {
+			result := c.Param(test.key)
+			if result != test.expected {
+				t.Errorf("Expected param %s = %s, got %s", test.key, test.expected, result)
 			}
-		}()
-		c.MustGet("nonexistent")
-		c.Next()
-	})
-
-	engine2.GET("/test", func(c *relay.Context) {
-		c.String(200, "test")
-	})
-
-	req = httptest.NewRequest("GET", "/test", nil)
-	w = httptest.NewRecorder()
-	engine2.ServeHTTP(w, req)
+		})
+	}
 }
 
-// TestContextNext 测试中间件链执行功能
-// 定位：中间件链执行测试
-// 作用：验证 Next() 方法是否正确执行中间件链
-// 使用方法：go test -run TestContextNext
-func TestContextNext(t *testing.T) {
-	engine := relay.New()
+func TestContextQuery(t *testing.T) {
+	req := httptest.NewRequest("GET", "/search?q=golang&page=2&sort=name", nil)
+	w := httptest.NewRecorder()
 
-	executionOrder := make([]int, 0)
+	c := NewContext(w, req)
 
-	// 创建测试中间件
-	middleware1 := func(c *relay.Context) {
-		executionOrder = append(executionOrder, 1)
-		c.Next()
-		executionOrder = append(executionOrder, 4)
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		{"q", "golang"},
+		{"page", "2"},
+		{"sort", "name"},
+		{"nonexistent", ""},
 	}
 
-	middleware2 := func(c *relay.Context) {
-		executionOrder = append(executionOrder, 2)
-		c.Next()
-		executionOrder = append(executionOrder, 3)
+	for _, test := range tests {
+		t.Run(test.key, func(t *testing.T) {
+			result := c.Query(test.key)
+			if result != test.expected {
+				t.Errorf("Expected query %s = %s, got %s", test.key, test.expected, result)
+			}
+		})
 	}
+}
 
-	engine.Use(middleware1, middleware2)
+func TestContextBindJSON(t *testing.T) {
+	t.Run("ValidJSON", func(t *testing.T) {
+		jsonData := `{"name":"John","age":30,"email":"john@example.com"}`
+		req := httptest.NewRequest("POST", "/users", strings.NewReader(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	// 注册路由
-	engine.GET("/test", func(c *relay.Context) {
-		c.String(200, "test")
+		c := NewContext(w, req)
+
+		var user struct {
+			Name  string `json:"name"`
+			Age   int    `json:"age"`
+			Email string `json:"email"`
+		}
+
+		err := c.BindJSON(&user)
+		if err != nil {
+			t.Fatalf("BindJSON should not return error for valid JSON: %v", err)
+		}
+
+		if user.Name != "John" {
+			t.Errorf("Expected name 'John', got '%s'", user.Name)
+		}
+
+		if user.Age != 30 {
+			t.Errorf("Expected age 30, got %d", user.Age)
+		}
+
+		if user.Email != "john@example.com" {
+			t.Errorf("Expected email 'john@example.com', got '%s'", user.Email)
+		}
 	})
 
-	// 创建请求
+	t.Run("InvalidJSON", func(t *testing.T) {
+		invalidJSON := `{"name":"John","age":}`
+		req := httptest.NewRequest("POST", "/users", strings.NewReader(invalidJSON))
+		w := httptest.NewRecorder()
+
+		c := NewContext(w, req)
+
+		var user struct {
+			Name string `json:"name"`
+			Age  int    `json:"age"`
+		}
+
+		err := c.BindJSON(&user)
+		if err == nil {
+			t.Error("BindJSON should return error for invalid JSON")
+		}
+	})
+}
+
+func TestContextStatus(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 
-	// 处理请求
-	engine.ServeHTTP(w, req)
+	c := NewContext(w, req)
 
-	// 验证执行顺序（洋葱模型）
-	expectedOrder := []int{1, 2, 3, 4}
-	for i, v := range expectedOrder {
-		if executionOrder[i] != v {
-			t.Errorf("Expected execution order %v, but got %v", expectedOrder, executionOrder)
-			break
+	// First status call should work
+	c.Status(201)
+	if w.Code != 201 {
+		t.Errorf("Expected status code 201, got %d", w.Code)
+	}
+
+	if !c.statusCodeWritten {
+		t.Error("statusCodeWritten should be true after Status call")
+	}
+
+	// Second status call should be ignored
+	c.Status(404)
+	if w.Code != 201 {
+		t.Errorf("Status code should remain 201, got %d", w.Code)
+	}
+}
+
+func TestContextJSON(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	data := map[string]interface{}{
+		"message": "success",
+		"data":    []int{1, 2, 3},
+		"user": map[string]string{
+			"name":  "John",
+			"email": "john@example.com",
+		},
+	}
+
+	err := c.JSON(200, data)
+	if err != nil {
+		t.Fatalf("JSON should not return error: %v", err)
+	}
+
+	if w.Code != 200 {
+		t.Errorf("Expected status code 200, got %d", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("Expected Content-Type 'application/json', got '%s'", contentType)
+	}
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if response["message"] != "success" {
+		t.Errorf("Expected message 'success', got '%v'", response["message"])
+	}
+}
+
+func TestContextString(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	err := c.String(200, "Hello %s, you are %d years old", "John", 30)
+	if err != nil {
+		t.Fatalf("String should not return error: %v", err)
+	}
+
+	if w.Code != 200 {
+		t.Errorf("Expected status code 200, got %d", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/plain; charset=utf-8" {
+		t.Errorf("Expected Content-Type 'text/plain; charset=utf-8', got '%s'", contentType)
+	}
+
+	expected := "Hello John, you are 30 years old"
+	if w.Body.String() != expected {
+		t.Errorf("Expected body '%s', got '%s'", expected, w.Body.String())
+	}
+}
+
+func TestContextNext(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	var executed []string
+
+	handlers := []HandlerFunc{
+		func(c *Context) {
+			executed = append(executed, "handler1")
+			c.Next()
+		},
+		func(c *Context) {
+			executed = append(executed, "handler2")
+			c.Next()
+		},
+		func(c *Context) {
+			executed = append(executed, "handler3")
+		},
+	}
+
+	c.handlers = handlers
+
+	c.Next()
+
+	expected := []string{"handler1", "handler2", "handler3"}
+	if len(executed) != len(expected) {
+		t.Fatalf("Expected %d executions, got %d", len(expected), len(executed))
+	}
+
+	for i, exp := range expected {
+		if executed[i] != exp {
+			t.Errorf("Expected execution[%d] = '%s', got '%s'", i, exp, executed[i])
 		}
 	}
 }
 
-// TestContextAbort 测试中间件链中止功能
-// 定位：中间件链中止测试
-// 作用：验证 Abort() 方法是否正确中止中间件链执行
-// 使用方法：go test -run TestContextAbort
-func TestContextAbort(t *testing.T) {
-	engine := relay.New()
-
-	executed := false
-
-	// 创建测试中间件
-	middleware := func(c *relay.Context) {
-		c.Abort()
-	}
-
-	afterMiddleware := func(c *relay.Context) {
-		executed = true
-		c.String(200, "should not execute")
-	}
-
-	engine.Use(middleware, afterMiddleware)
-
-	// 注册路由
-	engine.GET("/test", func(c *relay.Context) {
-		c.String(200, "handler")
-	})
-
-	// 创建请求
+func TestContextNextWithError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 
-	// 处理请求
-	engine.ServeHTTP(w, req)
+	c := NewContext(w, req)
 
-	// 验证第二个中间件未执行
-	if executed {
-		t.Error("Expected Abort() to prevent further middleware execution")
+	testError := fmt.Errorf("test error")
+
+	c.handlers = []HandlerFunc{
+		func(c *Context) {
+			c.Next(testError)
+		},
 	}
 
-	// 验证处理函数未执行
-	if w.Body.String() == "handler" {
-		t.Error("Expected handler not to be executed after Abort()")
+	c.Next()
+
+	if c.err == nil {
+		t.Fatal("Context should have error set")
 	}
 
-	// 验证中止响应
-	if w.Body.String() == "should not execute" {
-		t.Error("Expected afterMiddleware not to be executed after Abort()")
+	if c.err.Error() != "test error" {
+		t.Errorf("Expected error 'test error', got '%s'", c.err.Error())
+	}
+}
+
+func TestContextAbort(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	var executed []string
+
+	handlers := []HandlerFunc{
+		func(c *Context) {
+			executed = append(executed, "handler1")
+			c.Abort()
+		},
+		func(c *Context) {
+			executed = append(executed, "handler2")
+		},
+	}
+
+	c.handlers = handlers
+
+	c.Next()
+
+	// Only first handler should execute
+	if len(executed) != 1 || executed[0] != "handler1" {
+		t.Errorf("Expected only 'handler1' to execute, got %v", executed)
+	}
+
+	if !c.IsAborted() {
+		t.Error("Context should be aborted")
+	}
+}
+
+func TestContextSetGet(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	// Test Set and Get
+	c.Set("user", "john")
+	c.Set("age", 30)
+	c.Set("active", true)
+
+	// Test Get existing values
+	user, exists := c.Get("user")
+	if !exists {
+		t.Error("Expected 'user' key to exist")
+	}
+	if user != "john" {
+		t.Errorf("Expected user 'john', got '%v'", user)
+	}
+
+	age, exists := c.Get("age")
+	if !exists {
+		t.Error("Expected 'age' key to exist")
+	}
+	if age != 30 {
+		t.Errorf("Expected age 30, got %v", age)
+	}
+
+	// Test Get non-existing value
+	_, exists = c.Get("nonexistent")
+	if exists {
+		t.Error("Expected 'nonexistent' key to not exist")
+	}
+}
+
+func TestContextMustGet(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	t.Run("ExistingKey", func(t *testing.T) {
+		c.Set("user", "john")
+
+		result := c.MustGet("user")
+		if result != "john" {
+			t.Errorf("Expected 'john', got '%v'", result)
+		}
+	})
+
+	t.Run("NonExistentKey", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("MustGet should panic for non-existent key")
+			}
+		}()
+
+		c.MustGet("nonexistent")
+	})
+}
+
+func TestContextGetString(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	// Test string value
+	c.Set("name", "john")
+	name, ok := c.GetString("name")
+	if !ok {
+		t.Error("Expected string value to be found")
+	}
+	if name != "john" {
+		t.Errorf("Expected 'john', got '%s'", name)
+	}
+
+	// Test non-string value
+	c.Set("age", 30)
+	_, ok = c.GetString("age")
+	if ok {
+		t.Error("Expected non-string value to return false")
+	}
+
+	// Test non-existent key
+	_, ok = c.GetString("nonexistent")
+	if ok {
+		t.Error("Expected non-existent key to return false")
+	}
+
+	// Test nil value
+	c.Set("nilValue", nil)
+	_, ok = c.GetString("nilValue")
+	if ok {
+		t.Error("Expected nil value to return false")
+	}
+}
+
+func TestContextPool(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	// Create context from pool
+	c1 := NewContext(w, req)
+
+	// Use and reset the context
+	c1.Set("test", "value")
+	c1.params["id"] = "123"
+	c1.index = 5
+	c1.aborted = true
+
+	c1.reset()
+	contextPool.Put(c1)
+
+	// Get another context from pool (should be the same instance)
+	c2 := NewContext(w, req)
+
+	// Verify it's reset
+	if len(c2.store) != 0 {
+		t.Error("Context from pool should have empty store")
+	}
+	if len(c2.params) != 0 {
+		t.Error("Context from pool should have empty params")
+	}
+	if c2.index != -1 {
+		t.Error("Context from pool should have index -1")
+	}
+	if c2.aborted {
+		t.Error("Context from pool should not be aborted")
+	}
+}
+
+func BenchmarkContextParam(b *testing.B) {
+	req := httptest.NewRequest("GET", "/users/123", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(w, req)
+	c.params = map[string]string{"id": "123"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Param("id")
+	}
+}
+
+func BenchmarkContextQuery(b *testing.B) {
+	req := httptest.NewRequest("GET", "/search?q=golang&page=2", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(w, req)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Query("q")
+	}
+}
+
+func BenchmarkContextJSON(b *testing.B) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	data := map[string]string{"message": "hello"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		c := NewContext(w, req)
+		c.JSON(200, data)
+	}
+}
+
+func BenchmarkContextSetGet(b *testing.B) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(w, req)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Set("key", "value")
+		c.Get("key")
+	}
+}
+
+func BenchmarkContextFromPool(b *testing.B) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c := NewContext(w, req)
+		c.reset()
+		contextPool.Put(c)
 	}
 }
