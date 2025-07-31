@@ -1,10 +1,6 @@
-// Package goxpress 是一个类似 Express.js 的 Go Web 框架
-// 定位：路由管理模块
-// 作用：实现基于 Radix Tree 的高效路由匹配算法，管理路由和路由组
-// 使用方法：
-//  1. 通过 goxpress.NewRouter() 创建路由器实例
-//  2. 使用 router.GET() 等方法注册路由
-//  3. 使用 router.Group() 创建路由组
+// Package goxpress provides a fast, intuitive web framework for Go inspired by Express.js.
+// This file contains the HTTP routing system implementation using Radix Tree algorithm
+// for efficient route matching and parameter extraction.
 package goxpress
 
 import (
@@ -12,65 +8,55 @@ import (
 	"sync"
 )
 
-// 定义一个用于分割路径的strings.Builder池
+// builderPool is a sync.Pool for strings.Builder to reduce memory allocations
+// during path parsing operations.
 var builderPool = sync.Pool{
 	New: func() interface{} {
 		return &strings.Builder{}
 	},
 }
 
-// Router 管理指定路径前缀的路由和中间件
-// 定位：路由管理器
-// 作用：
-//  1. 管理路由注册和匹配
-//  2. 管理路由组和中间件
-//  3. 实现 Radix Tree 路由算法
+// Router represents the HTTP router that manages route registration and matching.
+// It uses a Radix Tree data structure for efficient route lookup and supports:
+//   - Static routes: "/users"
+//   - Parameter routes: "/users/:id"
+//   - Wildcard routes: "/files/*filepath"
+//   - Route groups with shared prefixes and middleware
 //
-// 使用方法：
-//  1. 通过 NewRouter() 创建实例
-//  2. 使用 Handle() 或 HTTP 方法函数注册路由
-//  3. 使用 Group() 创建路由组
-//  4. 使用 Use() 注册中间件
+// The Router is safe for concurrent read access after route registration is complete.
 type Router struct {
-	prefix      string                 // 路由前缀
-	middlewares []HandlerFunc          // 路由器级别中间件
-	engine      *Engine                // 关联的引擎实例
-	subRouters  map[string]*Router     // 子路由器映射
-	routes      map[string]*routerTree // 路由树映射，按 HTTP 方法分类
+	prefix      string                 // Route group prefix
+	middlewares []HandlerFunc          // Group-specific middleware
+	engine      *Engine                // Reference to parent engine
+	subRouters  map[string]*Router     // Nested route groups
+	routes      map[string]*routerTree // HTTP method -> route tree mapping
 }
 
-// routerTree 表示特定 HTTP 方法的基数树
-// 定位：路由树结构
-// 作用：为每个 HTTP 方法维护一棵独立的 Radix Tree
-// 使用方法：框架内部使用，用于高效路由匹配
+// routerTree implements a Radix Tree for efficient route matching.
+// Each HTTP method has its own tree to avoid conflicts between
+// different HTTP verbs on the same path.
 type routerTree struct {
-	root *routerNode // 树的根节点
+	root *routerNode // Root node of the tree
 }
 
-// routerNode 表示基数树中的节点
-// 定位：路由树节点
-// 作用：
-//  1. 存储路由模式片段
-//  2. 维护子节点关系
-//  3. 标识是否为通配符节点
-//  4. 存储处理函数
-//
-// 使用方法：框架内部使用，构建和搜索路由树
+// routerNode represents a single node in the Radix Tree.
+// Each node can represent part of a URL path and may contain
+// handlers if it represents a complete route.
 type routerNode struct {
-	pattern  string        // 完整路由模式，例如 /p/:lang/doc
-	part     string        // 路由片段，例如 :lang
-	children []*routerNode // 子节点列表
-	isWild   bool          // 是否为通配符匹配，part 含有 : 或 * 时为 true
-	handlers []HandlerFunc // 处理函数列表
+	pattern  string        // Complete route pattern (e.g., "/users/:id")
+	part     string        // Path segment for this node (e.g., ":id")
+	children []*routerNode // Child nodes
+	isWild   bool          // True if this node represents a parameter or wildcard
+	handlers []HandlerFunc // Route handlers (only set for terminal nodes)
 }
 
-// NewRouter 创建一个新的 Router 实例
-// 定位：Router 结构体的构造函数
-// 作用：初始化 Router 实例及其依赖组件
-// 使用方法：
+// NewRouter creates and returns a new Router instance.
+// The router is initialized with empty route trees for all HTTP methods.
+//
+// Example:
 //
 //	router := NewRouter()
-//	通常由 Engine 自动创建，也可以手动创建用于路由组
+//	router.GET("/users", getUsersHandler)
 func NewRouter() *Router {
 	return &Router{
 		subRouters: make(map[string]*Router),
@@ -78,166 +64,169 @@ func NewRouter() *Router {
 	}
 }
 
-// Use 为路由器注册中间件
-// 定位：路由器级别中间件注册方法
-// 作用：为当前路由器及其子路由注册中间件
-// 使用方法：
+// Use registers middleware functions for this router group.
+// Middleware registered on a router will only apply to routes
+// defined on that router and its sub-groups.
+// Returns the Router instance for method chaining.
 //
-//	router.Use(loggingMiddleware, authMiddleware)
-//	返回 *Router 实例，支持链式调用
+// Example:
+//
+//	api := app.Route("/api")
+//	api.Use(AuthMiddleware()).Use(LoggingMiddleware())
 func (r *Router) Use(middleware ...HandlerFunc) *Router {
 	r.middlewares = append(r.middlewares, middleware...)
 	return r
 }
 
-// Group 创建具有指定前缀的新路由组
-// 定位：路由组创建方法
-// 作用：创建具有共同前缀和中间件的新路由组
-// 使用方法：
+// Group creates a new sub-router with the given prefix.
+// The sub-router inherits middleware from its parent and can
+// define additional middleware that only applies to its routes.
 //
-//	api := router.Group("/api")
-//	api.Use(apiMiddleware)
-//	api.GET("/users", getUsers)
-//	返回新的 *Router 实例
+// Example:
+//
+//	api := app.Route("/api")
+//	v1 := api.Group("/v1")  // Routes will have "/api/v1" prefix
+//	v1.GET("/users", handler)  // Handles "/api/v1/users"
 func (r *Router) Group(prefix string) *Router {
 	router := &Router{
 		prefix:      r.prefix + prefix,
-		middlewares: make([]HandlerFunc, len(r.middlewares)), // 复制父路由器的中间件
+		middlewares: make([]HandlerFunc, len(r.middlewares)), // Copy parent middleware
 		engine:      r.engine,
 		subRouters:  make(map[string]*Router),
-		routes:      r.routes,
+		routes:      r.routes, // Share route trees with parent
 	}
 
-	// 拷贝父路由器的中间件
+	// Copy parent middleware to new router
 	copy(router.middlewares, r.middlewares)
 
+	r.subRouters[prefix] = router
 	return router
 }
 
-// Handle 注册具有指定方法、模式和处理函数的新路由
-// 定位：通用路由注册方法
-// 作用：为指定 HTTP 方法和路径注册处理函数
-// 使用方法：
+// Handle registers a new route with the specified HTTP method and pattern.
+// This is the core route registration method used by all HTTP method helpers.
 //
-//	router.Handle("GET", "/users/:id", getUser)
+// The method combines the router's prefix with the pattern and prepares
+// the final handler chain including group middleware.
 func (r *Router) Handle(method, pattern string, handlers ...HandlerFunc) {
-	// 合并路由器前缀和路由模式
+	// Combine router prefix with route pattern
 	fullPattern := r.prefix + pattern
 	if r.prefix != "" && pattern == "/" {
 		fullPattern = r.prefix
 	}
 
-	// 准备处理器链：先添加路由器中间件，再添加路由处理器
+	// Build final handler chain: group middleware + route handlers
 	finalHandlers := make([]HandlerFunc, 0)
 	finalHandlers = append(finalHandlers, r.middlewares...)
 	finalHandlers = append(finalHandlers, handlers...)
 
+	// Register the route
 	r.addRoute(method, fullPattern, finalHandlers)
 }
 
-// HTTP 方法注册函数
-// 定位：HTTP 方法注册方法
-// 作用：为指定 HTTP 方法和路径注册处理函数
-// 使用方法：
+// GET registers a new route for HTTP GET requests.
+// Returns the Router instance for method chaining.
 //
-//	router.GET("/path", handler)
-//	返回 *Router 实例，支持链式调用
+// Example:
+//
+//	router.GET("/users/:id", getUserHandler)
 func (r *Router) GET(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("GET", pattern, handlers...)
 	return r
 }
 
+// POST registers a new route for HTTP POST requests.
+// Returns the Router instance for method chaining.
 func (r *Router) POST(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("POST", pattern, handlers...)
 	return r
 }
 
+// PUT registers a new route for HTTP PUT requests.
+// Returns the Router instance for method chaining.
 func (r *Router) PUT(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("PUT", pattern, handlers...)
 	return r
 }
 
+// DELETE registers a new route for HTTP DELETE requests.
+// Returns the Router instance for method chaining.
 func (r *Router) DELETE(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("DELETE", pattern, handlers...)
 	return r
 }
 
+// PATCH registers a new route for HTTP PATCH requests.
+// Returns the Router instance for method chaining.
 func (r *Router) PATCH(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("PATCH", pattern, handlers...)
 	return r
 }
 
+// HEAD registers a new route for HTTP HEAD requests.
+// Returns the Router instance for method chaining.
 func (r *Router) HEAD(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("HEAD", pattern, handlers...)
 	return r
 }
 
+// OPTIONS registers a new route for HTTP OPTIONS requests.
+// Returns the Router instance for method chaining.
 func (r *Router) OPTIONS(pattern string, handlers ...HandlerFunc) *Router {
 	r.Handle("OPTIONS", pattern, handlers...)
 	return r
 }
 
-// parsePattern 将路由模式解析为片段
-// 定位：路由模式解析函数
-// 作用：将路由模式字符串分割为片段数组
-// 使用方法：
+// parsePattern splits a URL pattern into path segments, removing empty segments.
+// It uses a pool of strings.Builder for efficient string operations.
 //
-//	parts := parsePattern("/users/:id")
-//	// 返回 ["users", ":id"]
+// Examples:
+//
+//	"/users/:id" -> ["users", ":id"]
+//	"/api/v1/users" -> ["api", "v1", "users"]
+//	"/files/*filepath" -> ["files", "*filepath"]
 func parsePattern(pattern string) []string {
-	// 从池中获取builder
+	// Get builder from pool for efficient string operations
 	builder := builderPool.Get().(*strings.Builder)
 	defer func() {
 		builder.Reset()
 		builderPool.Put(builder)
 	}()
 
-	// 预估容量以减少重新分配
+	// Pre-allocate slice with estimated capacity
 	parts := make([]string, 0, strings.Count(pattern, "/"))
 
-	start := 0
-	for i, char := range pattern {
-		if char == '/' {
-			if start < i {
-				part := pattern[start:i]
-				parts = append(parts, part)
-				if part[0] == '*' {
-					break
-				}
-			}
-			start = i + 1
+	// Split by '/' and filter out empty parts
+	segments := strings.Split(pattern, "/")
+	for _, segment := range segments {
+		if segment != "" {
+			parts = append(parts, segment)
 		}
-	}
-
-	// 处理最后一个片段
-	if start < len(pattern) {
-		part := pattern[start:]
-		parts = append(parts, part)
 	}
 
 	return parts
 }
 
-// addRoute 将新路由添加到基数树
-// 定位：路由添加方法
-// 作用：将路由模式和处理函数插入到对应的 Radix Tree 中
-// 使用方法：由 Handle() 方法内部调用
+// addRoute adds a new route to the appropriate route tree.
+// It creates the tree for the HTTP method if it doesn't exist,
+// then inserts the route pattern into the Radix Tree.
 func (r *Router) addRoute(method, pattern string, handlers []HandlerFunc) {
-	// 为方法创建树（如果不存在）
+	// Create route tree for method if it doesn't exist
 	if r.routes[method] == nil {
 		r.routes[method] = &routerTree{root: &routerNode{}}
 	}
 
 	parts := parsePattern(pattern)
 
-	// 将模式插入基数树
+	// Insert pattern into the Radix Tree
 	r.routes[method].insertRoute(pattern, parts, 0, handlers)
 }
 
-// getRoute 查找与给定方法和路径匹配的路由
-// 定位：路由查找方法
-// 作用：在 Radix Tree 中查找匹配的路由节点
-// 使用方法：由 Engine.ServeHTTP() 调用以匹配请求路由
+// getRoute finds a matching route for the given HTTP method and path.
+// Returns the matching node and extracted URL parameters, or nil if no match.
+//
+// The method performs efficient tree traversal to find the best match,
+// extracting parameters along the way.
 func (r *Router) getRoute(method, path string) (*routerNode, map[string]string) {
 	root, ok := r.routes[method]
 	if !ok {
@@ -249,19 +238,13 @@ func (r *Router) getRoute(method, path string) (*routerNode, map[string]string) 
 
 	node := root.searchRoute(searchParts, 0, params)
 
-	if node != nil {
-		return node, params
-	}
-
-	return nil, nil
+	return node, params
 }
 
-// walkMountRoutes 递归遍历路由树，将路由添加到引擎中
-// 定位：路由遍历方法
-// 作用：递归遍历路由树，将每个节点的路由添加到引擎中
-// 使用方法：框架内部使用，用于路由挂载
+// walkMountRoutes recursively walks through route tree nodes to mount routes
+// from sub-routers. This is used internally for route group management.
 func (r *Router) walkMountRoutes(node *routerNode, method, mountPrefix string, groupMiddlewares []HandlerFunc, addRoute func(method, pattern string, handlers []HandlerFunc)) {
-	// 如果是根节点，递归处理子节点
+	// If this is a root node, recursively process children
 	if node.pattern == "" {
 		for _, child := range node.children {
 			r.walkMountRoutes(child, method, mountPrefix, groupMiddlewares, addRoute)
@@ -269,30 +252,23 @@ func (r *Router) walkMountRoutes(node *routerNode, method, mountPrefix string, g
 		return
 	}
 
-	// 计算完整的路由模式
+	// Calculate the full route pattern
 	pattern := strings.TrimSuffix(mountPrefix, "/") + strings.TrimPrefix(node.pattern, r.prefix)
 
-	// 准备处理器链：先添加路由器中间件，再添加路由处理器
+	// Combine group middleware with route handlers
 	finalHandlers := make([]HandlerFunc, 0)
-	finalHandlers = append(finalHandlers, r.middlewares...)
 	finalHandlers = append(finalHandlers, groupMiddlewares...)
 	finalHandlers = append(finalHandlers, node.handlers...)
 
-	// 添加路由
+	// Add the route
 	addRoute(method, pattern, finalHandlers)
-
-	// 递归处理子节点
-	for _, child := range node.children {
-		r.walkMountRoutes(child, method, mountPrefix, groupMiddlewares, addRoute)
-	}
 }
 
-// insertRoute 将路由模式插入基数树
-// 定位：路由插入方法
-// 作用：递归地将路由模式插入到 Radix Tree 中
-// 使用方法：由 addRoute() 方法内部调用
+// insertRoute recursively inserts a route pattern into the Radix Tree.
+// It builds the tree structure by creating nodes for each path segment
+// and handles parameter and wildcard matching.
 func (t *routerTree) insertRoute(pattern string, parts []string, height int, handlers []HandlerFunc) {
-	// 基本情况：已处理完所有片段
+	// Base case: all segments processed
 	if len(parts) == height {
 		t.root.pattern = pattern
 		t.root.handlers = handlers
@@ -303,7 +279,7 @@ func (t *routerTree) insertRoute(pattern string, parts []string, height int, han
 	child := t.root.matchChild(part)
 
 	if child == nil {
-		// 创建新子节点
+		// Create new child node
 		child = &routerNode{
 			part:   part,
 			isWild: part[0] == ':' || part[0] == '*',
@@ -311,17 +287,15 @@ func (t *routerTree) insertRoute(pattern string, parts []string, height int, han
 		t.root.children = append(t.root.children, child)
 	}
 
-	// 递归插入剩余模式
-	tree := &routerTree{root: child}
-	tree.insertRoute(pattern, parts, height+1, handlers)
+	// Recursively insert remaining parts
+	childTree := &routerTree{root: child}
+	childTree.insertRoute(pattern, parts, height+1, handlers)
 }
 
-// searchRoute 在基数树中搜索路由
-// 定位：路由搜索方法
-// 作用：递归地在 Radix Tree 中搜索匹配的路由节点
-// 使用方法：由 getRoute() 方法内部调用
+// searchRoute performs recursive search through the Radix Tree to find
+// a matching route. It extracts URL parameters during traversal.
 func (t *routerTree) searchRoute(parts []string, height int, params map[string]string) *routerNode {
-	// 基本情况：已处理完所有片段或遇到通配符
+	// Base case: all parts processed or wildcard encountered
 	if len(parts) == height || strings.HasPrefix(t.root.part, "*") {
 		if t.root.pattern == "" {
 			return nil
@@ -330,28 +304,26 @@ func (t *routerTree) searchRoute(parts []string, height int, params map[string]s
 	}
 
 	part := parts[height]
-
-	// 检查所有子节点
-	children := t.root.children
-	for _, child := range children {
+	// Check all children for matches
+	for _, child := range t.root.children {
 		if child.part == part || child.isWild {
-			// 处理参数匹配
+			// Handle parameter matching
 			if child.isWild && child.part[0] == ':' {
 				params[child.part[1:]] = part
 			} else if child.isWild && child.part[0] == '*' {
-				// 对于通配符，捕获路径的其余部分
+				// For wildcard, capture the rest of the path
 				params[child.part[1:]] = strings.Join(parts[height:], "/")
 				return child
 			}
 
-			// 递归在子节点中搜索
-			tree := &routerTree{root: child}
-			result := tree.searchRoute(parts, height+1, params)
+			// Recursively search in child node
+			childTree := &routerTree{root: child}
+			result := childTree.searchRoute(parts, height+1, params)
 			if result != nil {
 				return result
 			}
 
-			// 如有必要，回溯参数
+			// Backtrack parameters if necessary
 			if child.isWild && child.part[0] == ':' {
 				delete(params, child.part[1:])
 			}
@@ -361,13 +333,10 @@ func (t *routerTree) searchRoute(parts []string, height int, params map[string]s
 	return nil
 }
 
-// matchChild 查找与给定片段匹配的子节点
-// 定位：子节点匹配方法
-// 作用：在当前节点的子节点中查找匹配的节点
-// 使用方法：由 insertRoute() 方法内部调用
+// matchChild finds a direct child node that matches the given part.
+// Returns nil if no exact match is found.
 func (n *routerNode) matchChild(part string) *routerNode {
 	for _, child := range n.children {
-		// 精确匹配或通配符匹配
 		if child.part == part || child.isWild {
 			return child
 		}

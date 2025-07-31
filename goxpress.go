@@ -1,53 +1,92 @@
-// Package goxpress 是一个类似 Express.js 的 Go Web 框架
-// 定位：框架的核心引擎，负责协调路由、中间件和请求处理
-// 作用：实现 http.Handler 接口，管理路由和中间件，提供 HTTP 服务启动功能
-// 使用方法：
-//  1. 创建引擎实例：app := goxpress.New()
-//  2. 注册中间件：app.Use(middleware)
-//  3. 定义路由：app.GET("/path", handler)
-//  4. 启动服务：app.Listen(":8080", nil)
+// Package goxpress provides a fast, intuitive web framework for Go inspired by Express.js.
+// It offers Express.js-like API design with excellent performance and full Go type safety.
+//
+// goxpress is built for developer productivity while maintaining high performance.
+// It features a powerful middleware system, efficient routing with Radix Tree algorithm,
+// and comprehensive request/response handling capabilities.
+//
+// Basic Usage:
+//
+//	app := goxpress.New()
+//	app.GET("/", func(c *goxpress.Context) {
+//		c.String(200, "Hello, World!")
+//	})
+//	app.Listen(":8080", nil)
+//
+// Middleware Support:
+//
+//	app.Use(goxpress.Logger())
+//	app.Use(goxpress.Recover())
+//	app.Use(func(c *goxpress.Context) {
+//		// Custom middleware logic
+//		c.Next()
+//	})
+//
+// Route Groups:
+//
+//	api := app.Route("/api")
+//	api.GET("/users", getUsersHandler)
+//	api.POST("/users", createUserHandler)
+//
+// Error Handling:
+//
+//	app.UseError(func(err error, c *goxpress.Context) {
+//		c.JSON(500, map[string]string{"error": err.Error()})
+//	})
 package goxpress
 
 import (
 	"net/http"
 )
 
-// HandlerFunc 定义处理 HTTP 请求的函数类型
-// 定位：中间件和路由处理器的统一函数签名
-// 作用：为中间件和路由处理函数提供统一的接口
-// 使用方法：实现此函数类型，接收 *Context 参数，处理请求逻辑
+// HandlerFunc defines the signature for HTTP request handlers.
+// It receives a Context that provides access to request data, response writing,
+// and flow control mechanisms.
+//
+// Example:
+//
+//	func myHandler(c *goxpress.Context) {
+//		id := c.Param("id")
+//		c.JSON(200, map[string]string{"user_id": id})
+//	}
 type HandlerFunc func(*Context)
 
-// ErrorHandlerFunc 定义处理错误的函数类型
-// 定位：专门用于处理错误的中间件函数签名
-// 作用：捕获和处理在请求处理过程中发生的错误
-// 使用方法：实现此函数类型，接收 error 和 *Context 参数，处理错误逻辑
+// ErrorHandlerFunc defines the signature for error handling middleware.
+// It receives an error and a Context, allowing custom error processing
+// and response generation.
+//
+// Example:
+//
+//	func errorHandler(err error, c *goxpress.Context) {
+//		c.JSON(500, map[string]string{"error": err.Error()})
+//	}
 type ErrorHandlerFunc func(error, *Context)
 
-// Engine 是 goxpress 框架的主要结构体
-// 定位：框架的核心引擎，协调所有组件
-// 作用：
-//  1. 实现 http.Handler 接口
-//  2. 管理路由系统
-//  3. 管理全局中间件
-//  4. 管理错误处理中间件
+// Engine represents the main goxpress application instance.
+// It implements the http.Handler interface and coordinates routing,
+// middleware execution, and request processing.
 //
-// 使用方法：
-//  1. 通过 goxpress.New() 创建实例
-//  2. 使用 Use() 方法注册中间件
-//  3. 使用 UseError() 方法注册错误处理中间件
-//  4. 使用 HTTP 方法函数（GET/POST等）定义路由
-//  5. 使用 Listen() 启动 HTTP 服务
+// The Engine manages:
+//   - HTTP routing system
+//   - Global middleware chain
+//   - Error handling middleware
+//   - HTTP server lifecycle
+//
+// Create a new Engine instance using New().
 type Engine struct {
-	router        *Router            // 路由器，管理所有路由
-	middlewares   []HandlerFunc      // 全局中间件列表
-	errorHandlers []ErrorHandlerFunc // 错误处理中间件列表
+	router        *Router            // HTTP router for request matching
+	middlewares   []HandlerFunc      // Global middleware functions
+	errorHandlers []ErrorHandlerFunc // Error handling middleware
 }
 
-// New 创建一个新的 goxpress 引擎实例
-// 定位：Engine 结构体的构造函数
-// 作用：初始化 Engine 实例及其依赖组件
-// 使用方法：app := goxpress.New()
+// New creates and returns a new Engine instance with default configuration.
+// The returned Engine is ready to accept route registrations and middleware.
+//
+// Example:
+//
+//	app := goxpress.New()
+//	app.GET("/", handler)
+//	app.Listen(":8080", nil)
 func New() *Engine {
 	engine := &Engine{
 		router:        NewRouter(),
@@ -57,158 +96,195 @@ func New() *Engine {
 	return engine
 }
 
-// Use 注册全局中间件函数
-// 定位：中间件注册方法
-// 作用：将中间件添加到全局中间件链中，对所有请求生效
-// 使用方法：
+// Use registers global middleware functions that will be executed for all requests.
+// Middleware are executed in the order they are registered.
+// Returns the Engine instance for method chaining.
 //
-//	app.Use(Logger(), Recover())
-//	返回 *Engine 实例，支持链式调用
+// Middleware functions can:
+//   - Perform preprocessing (authentication, logging, etc.)
+//   - Modify request/response
+//   - Control request flow with c.Next() or c.Abort()
+//   - Handle errors by passing them to c.Next(err)
+//
+// Example:
+//
+//	app.Use(Logger()).Use(Recover()).Use(func(c *Context) {
+//		// Custom middleware logic
+//		c.Set("start_time", time.Now())
+//		c.Next()
+//	})
 func (e *Engine) Use(middleware ...HandlerFunc) *Engine {
 	e.middlewares = append(e.middlewares, middleware...)
 	return e
 }
 
-// UseError 注册错误处理中间件函数
-// 定位：错误处理中间件注册方法
-// 作用：将错误处理中间件添加到错误处理链中
-// 使用方法：
+// UseError registers error handling middleware that will be called when
+// errors occur during request processing. Error handlers are executed
+// in the order they are registered.
+// Returns the Engine instance for method chaining.
+//
+// Error handlers are triggered when:
+//   - A handler calls c.Next(err) with a non-nil error
+//   - A panic occurs and is recovered by the Recover middleware
+//
+// Example:
 //
 //	app.UseError(func(err error, c *Context) {
-//	    // 错误处理逻辑
+//		log.Printf("Error: %v", err)
+//		c.JSON(500, map[string]string{"error": "Internal Server Error"})
 //	})
-//	返回 *Engine 实例，支持链式调用
 func (e *Engine) UseError(handler ...ErrorHandlerFunc) *Engine {
 	e.errorHandlers = append(e.errorHandlers, handler...)
 	return e
 }
 
-// GET 注册一个新的 GET 路由
-// 定位：HTTP GET 方法路由注册方法
-// 作用：为指定路径注册 GET 请求处理函数
-// 使用方法：
+// GET registers a new route for HTTP GET requests.
+// Returns the Engine instance for method chaining.
 //
-//	app.GET("/users/:id", getUserHandler)
-//	返回 *Engine 实例，支持链式调用
+// The pattern supports:
+//   - Static paths: "/users"
+//   - Parameters: "/users/:id"
+//   - Wildcards: "/files/*filepath"
+//
+// Example:
+//
+//	app.GET("/users/:id", func(c *Context) {
+//		id := c.Param("id")
+//		c.JSON(200, map[string]string{"user_id": id})
+//	})
 func (e *Engine) GET(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.GET(pattern, handlers...)
 	return e
 }
 
-// POST 注册一个新的 POST 路由
-// 定位：HTTP POST 方法路由注册方法
-// 作用：为指定路径注册 POST 请求处理函数
-// 使用方法：
+// POST registers a new route for HTTP POST requests.
+// Returns the Engine instance for method chaining.
 //
-//	app.POST("/users", createUserHandler)
-//	返回 *Engine 实例，支持链式调用
+// Example:
+//
+//	app.POST("/users", func(c *Context) {
+//		var user User
+//		if err := c.BindJSON(&user); err != nil {
+//			c.JSON(400, map[string]string{"error": "Invalid JSON"})
+//			return
+//		}
+//		c.JSON(201, user)
+//	})
 func (e *Engine) POST(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.POST(pattern, handlers...)
 	return e
 }
 
-// PUT 注册一个新的 PUT 路由
-// 定位：HTTP PUT 方法路由注册方法
-// 作用：为指定路径注册 PUT 请求处理函数
-// 使用方法：
+// PUT registers a new route for HTTP PUT requests.
+// Returns the Engine instance for method chaining.
+//
+// Example:
 //
 //	app.PUT("/users/:id", updateUserHandler)
-//	返回 *Engine 实例，支持链式调用
 func (e *Engine) PUT(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.PUT(pattern, handlers...)
 	return e
 }
 
-// DELETE 注册一个新的 DELETE 路由
-// 定位：HTTP DELETE 方法路由注册方法
-// 作用：为指定路径注册 DELETE 请求处理函数
-// 使用方法：
+// DELETE registers a new route for HTTP DELETE requests.
+// Returns the Engine instance for method chaining.
+//
+// Example:
 //
 //	app.DELETE("/users/:id", deleteUserHandler)
-//	返回 *Engine 实例，支持链式调用
 func (e *Engine) DELETE(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.DELETE(pattern, handlers...)
 	return e
 }
 
-// PATCH 注册一个新的 PATCH 路由
-// 定位：HTTP PATCH 方法路由注册方法
-// 作用：为指定路径注册 PATCH 请求处理函数
-// 使用方法：
+// PATCH registers a new route for HTTP PATCH requests.
+// Returns the Engine instance for method chaining.
+//
+// Example:
 //
 //	app.PATCH("/users/:id", patchUserHandler)
-//	返回 *Engine 实例，支持链式调用
 func (e *Engine) PATCH(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.PATCH(pattern, handlers...)
 	return e
 }
 
-// HEAD 注册一个新的 HEAD 路由
-// 定位：HTTP HEAD 方法路由注册方法
-// 作用：为指定路径注册 HEAD 请求处理函数
-// 使用方法：
+// HEAD registers a new route for HTTP HEAD requests.
+// Returns the Engine instance for method chaining.
+//
+// Example:
 //
 //	app.HEAD("/users/:id", headUserHandler)
-//	返回 *Engine 实例，支持链式调用
 func (e *Engine) HEAD(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.HEAD(pattern, handlers...)
 	return e
 }
 
-// OPTIONS 注册一个新的 OPTIONS 路由
-// 定位：HTTP OPTIONS 方法路由注册方法
-// 作用：为指定路径注册 OPTIONS 请求处理函数
-// 使用方法：
+// OPTIONS registers a new route for HTTP OPTIONS requests.
+// Returns the Engine instance for method chaining.
+//
+// Example:
 //
 //	app.OPTIONS("/users", optionsUserHandler)
-//	返回 *Engine 实例，支持链式调用
 func (e *Engine) OPTIONS(pattern string, handlers ...HandlerFunc) *Engine {
 	e.router.OPTIONS(pattern, handlers...)
 	return e
 }
 
-// Route 创建一个新的路由组
-// 定位：路由组创建方法
-// 作用：创建具有共同前缀的路由组，便于组织相关路由
-// 使用方法：
+// Route creates a new route group with the specified prefix.
+// Route groups allow organizing related routes and applying
+// group-specific middleware.
+//
+// Example:
 //
 //	api := app.Route("/api")
 //	api.GET("/users", getUsersHandler)
+//	api.POST("/users", createUserHandler)
+//
+//	v1 := api.Group("/v1")
+//	v1.GET("/status", statusHandler)
 func (e *Engine) Route(prefix string) *Router {
 	return e.router.Group(prefix)
 }
 
-// ServeHTTP 实现 http.Handler 接口
-// 定位：HTTP 请求处理入口
-// 作用：处理所有进入的 HTTP 请求，协调路由匹配和中间件执行
-// 使用方法：由 HTTP 服务器自动调用，无需手动调用
+// ServeHTTP implements the http.Handler interface, making Engine compatible
+// with the standard net/http package. This method handles all incoming HTTP
+// requests by:
+//
+//  1. Creating a Context from the object pool
+//  2. Matching the request to a route
+//  3. Executing middleware chain and route handlers
+//  4. Handling any errors that occur
+//  5. Returning the Context to the pool
+//
+// This method is called automatically by the HTTP server and should not
+// be called directly in normal usage.
 func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// 从池中获取Context
+	// Get Context from pool for efficient memory usage
 	c := NewContext(w, req)
 
-	// 确保请求处理完成后将Context放回池中
+	// Ensure Context is returned to pool after request processing
 	defer func() {
 		c.reset()
 		contextPool.Put(c)
 	}()
 
-	// 查找匹配的路由
+	// Find matching route for the request
 	node, params := e.router.getRoute(req.Method, req.URL.Path)
 
-	// 设置 URL 参数
+	// Set URL parameters if route was found
 	if params != nil {
 		c.params = params
 	}
 
-	// 准备中间件链
+	// Build handler chain: global middleware + route handlers
 	handlers := make([]HandlerFunc, 0)
 	handlers = append(handlers, e.middlewares...)
 
-	// 添加路由处理器（如果路由存在）
 	if node != nil {
+		// Route found: add route-specific handlers
 		handlers = append(handlers, node.handlers...)
 	} else {
-		// 如果没有找到路由，设置404处理器
+		// No route found: add 404 handler
 		handlers = append(handlers, func(c *Context) {
 			c.Status(http.StatusNotFound)
 			c.String(http.StatusNotFound, "404 page not found")
@@ -217,10 +293,10 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	c.handlers = handlers
 
-	// 执行中间件链
+	// Execute the handler chain
 	c.Next()
 
-	// 处理错误（如果有）
+	// Process any errors that occurred during request handling
 	if c.err != nil && len(e.errorHandlers) > 0 {
 		for _, handler := range e.errorHandlers {
 			handler(c.err, c)
@@ -228,12 +304,18 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// Listen 启动 HTTP 服务器
-// 定位：HTTP 服务器启动方法
-// 作用：在指定地址启动 HTTP 服务器
-// 使用方法：
+// Listen starts an HTTP server on the specified address.
+// The callback function is called after the server starts but before
+// it begins accepting connections.
 //
-//	app.Listen(":8080", func() { fmt.Println("Server started") })
+// This is a blocking call that will run until the server is stopped
+// or encounters an error.
+//
+// Example:
+//
+//	app.Listen(":8080", func() {
+//		log.Println("Server started on :8080")
+//	})
 func (e *Engine) Listen(addr string, cb func()) error {
 	server := &http.Server{
 		Addr:    addr,
@@ -247,12 +329,19 @@ func (e *Engine) Listen(addr string, cb func()) error {
 	return server.ListenAndServe()
 }
 
-// ListenTLS 启动 HTTPS 服务器
-// 定位：HTTPS 服务器启动方法
-// 作用：在指定地址启动 HTTPS 服务器
-// 使用方法：
+// ListenTLS starts an HTTPS server on the specified address using
+// the provided TLS certificate and key files.
+// The callback function is called after the server starts but before
+// it begins accepting connections.
 //
-//	app.ListenTLS(":443", "cert.pem", "key.pem", func() { fmt.Println("HTTPS Server started") })
+// This is a blocking call that will run until the server is stopped
+// or encounters an error.
+//
+// Example:
+//
+//	app.ListenTLS(":443", "cert.pem", "key.pem", func() {
+//		log.Println("HTTPS Server started on :443")
+//	})
 func (e *Engine) ListenTLS(addr, certFile, keyFile string, cb func()) error {
 	server := &http.Server{
 		Addr:    addr,

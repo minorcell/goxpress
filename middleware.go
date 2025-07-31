@@ -1,10 +1,6 @@
-// Package relay 是一个类似 Express.js 的 Go Web 框架
-// 定位：内置中间件模块
-// 作用：提供常用的内置中间件，如日志记录和错误恢复
-// 使用方法：
-//  1. 使用 goxpress.Logger() 获取日志中间件
-//  2. 使用 goxpress.Recover() 获取错误恢复中间件
-//  3. 通过 app.Use() 注册中间件
+// Package goxpress provides a fast, intuitive web framework for Go inspired by Express.js.
+// This file contains built-in middleware implementations for common web application needs
+// such as request logging and panic recovery.
 package goxpress
 
 import (
@@ -13,49 +9,91 @@ import (
 	"time"
 )
 
-// Logger 返回记录 HTTP 请求的日志中间件
-// 定位：日志记录中间件
-// 作用：记录每个 HTTP 请求的基本信息，包括方法、路径、客户端地址和处理时间
-// 使用方法：
+// Logger returns a middleware that logs HTTP requests.
+// It records the HTTP method, URL path, client address, and processing time
+// for each request. The log output goes to the standard logger.
 //
-//	app := relay.New()
-//	app.Use(relay.Logger())
-//	该中间件会自动记录请求信息到标准日志输出
+// The middleware logs after the request is processed, allowing it to
+// measure the actual processing time including all other middleware
+// and the final handler.
+//
+// Example:
+//
+//	app := goxpress.New()
+//	app.Use(Logger()) // Enable request logging
+//	app.GET("/", handler)
+//
+// Output format: [METHOD] path clientAddr duration
+// Example output: [GET] /api/users 127.0.0.1:54321 1.2ms
 func Logger() HandlerFunc {
 	return func(c *Context) {
-		// 启动计时器
-		t := time.Now()
+		// Record start time
+		start := time.Now()
 
-		// 处理请求
+		// Process request through remaining middleware/handlers
 		c.Next()
 
-		// 记录请求日志
-		log.Printf("[%s] %s %s %v", c.Request.Method, c.Request.URL.Path, c.Request.RemoteAddr, time.Since(t))
+		// Log request details after processing
+		duration := time.Since(start)
+		log.Printf("[%s] %s %s %v",
+			c.Request.Method,
+			c.Request.URL.Path,
+			c.Request.RemoteAddr,
+			duration,
+		)
 	}
 }
 
-// Recover 返回从 panic 中恢复的中间件
-// 定位：错误恢复中间件
-// 作用：捕获处理过程中发生的 panic，防止服务崩溃，并将 panic 转换为错误传递给错误处理中间件
-// 使用方法：
+// Recover returns a middleware that recovers from panics that occur
+// during request processing. When a panic is caught, it is converted
+// to an error and passed to the error handling middleware chain.
 //
-//	app := relay.New()
-//	app.Use(relay.Recover())
-//	该中间件会自动捕获并处理 panic，防止服务中断
+// This middleware prevents panics from crashing the entire server
+// and allows for graceful error handling and logging.
+//
+// The middleware handles both error-type panics and arbitrary value panics,
+// converting them to appropriate error instances.
+//
+// Example:
+//
+//	app := goxpress.New()
+//	app.Use(Recover()) // Enable panic recovery
+//
+//	// Add error handler to process recovered panics
+//	app.UseError(func(err error, c *Context) {
+//		log.Printf("Recovered from panic: %v", err)
+//		c.JSON(500, map[string]string{"error": "Internal Server Error"})
+//	})
+//
+//	app.GET("/panic", func(c *Context) {
+//		panic("Something went wrong!") // Will be recovered
+//	})
 func Recover() HandlerFunc {
 	return func(c *Context) {
 		defer func() {
-			if err := recover(); err != nil {
-				log.Printf("Panic recovered: %v", err)
+			if r := recover(); r != nil {
+				// Log the panic for debugging
+				log.Printf("Panic recovered: %v", r)
+
+				// Abort further processing
 				c.Abort()
-				// 将 panic 作为错误传递给错误处理中间件
-				if e, ok := err.(error); ok {
-					c.Next(e)
+
+				// Convert panic to error and pass to error handlers
+				var err error
+				if e, ok := r.(error); ok {
+					// Panic value is already an error
+					err = e
 				} else {
-					c.Next(fmt.Errorf("%v", err))
+					// Convert arbitrary panic value to error
+					err = fmt.Errorf("%v", r)
 				}
+
+				// Pass error to error handling middleware
+				c.Next(err)
 			}
 		}()
+
+		// Continue with normal request processing
 		c.Next()
 	}
 }
