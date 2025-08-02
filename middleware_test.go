@@ -417,7 +417,194 @@ func BenchmarkRecover(b *testing.B) {
 
 	// Suppress log output during benchmark
 	log.SetOutput(&strings.Builder{})
+	// Restore log output
 	defer log.SetOutput(os.Stderr)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, req)
+	}
+}
+
+func TestLoggerWithConfig_SkipPaths(t *testing.T) {
+	var logOutput strings.Builder
+
+	config := LoggerConfig{
+		SkipPaths: []string{"/health", "/metrics", "/api/*/internal"},
+		Output:    &logOutput,
+	}
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+
+	// Add routes
+	app.GET("/health", func(c *Context) {
+		c.String(200, "OK")
+	})
+	app.GET("/api/v1/internal", func(c *Context) {
+		c.String(200, "Internal")
+	})
+	app.GET("/api/users", func(c *Context) {
+		c.String(200, "Users")
+	})
+
+	// Test skipped paths
+	tests := []struct {
+		path           string
+		shouldBeLogged bool
+	}{
+		{"/health", false},          // exact match skip
+		{"/metrics", false},         // exact match skip
+		{"/api/v1/internal", false}, // wildcard match skip
+		{"/api/users", true},        // should be logged
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			logOutput.Reset()
+
+			req := httptest.NewRequest("GET", tt.path, nil)
+			w := httptest.NewRecorder()
+			app.ServeHTTP(w, req)
+
+			logStr := logOutput.String()
+			if tt.shouldBeLogged && logStr == "" {
+				t.Errorf("Path %s should be logged but wasn't", tt.path)
+			}
+			if !tt.shouldBeLogged && logStr != "" {
+				t.Errorf("Path %s should be skipped but was logged: %s", tt.path, logStr)
+			}
+		})
+	}
+}
+
+func TestLoggerWithConfig_CustomOutput(t *testing.T) {
+	var buffer1, buffer2 strings.Builder
+
+	config1 := LoggerConfig{Output: &buffer1}
+	config2 := LoggerConfig{Output: &buffer2}
+
+	app1 := New()
+	app1.Use(LoggerWithConfig(config1))
+	app1.GET("/test1", func(c *Context) {
+		c.String(200, "OK1")
+	})
+
+	app2 := New()
+	app2.Use(LoggerWithConfig(config2))
+	app2.GET("/test2", func(c *Context) {
+		c.String(200, "OK2")
+	})
+
+	// Test first app
+	req1 := httptest.NewRequest("GET", "/test1", nil)
+	w1 := httptest.NewRecorder()
+	app1.ServeHTTP(w1, req1)
+
+	// Test second app
+	req2 := httptest.NewRequest("GET", "/test2", nil)
+	w2 := httptest.NewRecorder()
+	app2.ServeHTTP(w2, req2)
+
+	// Check outputs are separate
+	log1 := buffer1.String()
+	log2 := buffer2.String()
+
+	if !strings.Contains(log1, "/test1") {
+		t.Error("Buffer1 should contain /test1 log")
+	}
+	if strings.Contains(log1, "/test2") {
+		t.Error("Buffer1 should not contain /test2 log")
+	}
+	if !strings.Contains(log2, "/test2") {
+		t.Error("Buffer2 should contain /test2 log")
+	}
+	if strings.Contains(log2, "/test1") {
+		t.Error("Buffer2 should not contain /test1 log")
+	}
+}
+
+func TestLoggerWithConfig_WildcardMatching(t *testing.T) {
+	var logOutput strings.Builder
+
+	config := LoggerConfig{
+		SkipPaths: []string{"/api/*/health", "/admin/*/debug/*"},
+		Output:    &logOutput,
+	}
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+
+	tests := []struct {
+		path           string
+		shouldBeLogged bool
+	}{
+		{"/api/v1/health", false},          // matches /api/*/health
+		{"/api/v2/health", false},          // matches /api/*/health
+		{"/api/users", true},               // doesn't match
+		{"/admin/panel/debug/info", false}, // matches /admin/*/debug/*
+		{"/admin/panel/users", true},       // doesn't match
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			logOutput.Reset()
+
+			app.GET(tt.path, func(c *Context) {
+				c.String(200, "OK")
+			})
+
+			req := httptest.NewRequest("GET", tt.path, nil)
+			w := httptest.NewRecorder()
+			app.ServeHTTP(w, req)
+
+			logStr := logOutput.String()
+			if tt.shouldBeLogged && logStr == "" {
+				t.Errorf("Path %s should be logged but wasn't", tt.path)
+			}
+			if !tt.shouldBeLogged && logStr != "" {
+				t.Errorf("Path %s should be skipped but was logged: %s", tt.path, logStr)
+			}
+		})
+	}
+}
+
+func TestLoggerWithConfig_DefaultValues(t *testing.T) {
+	// Test that default values are applied when config is empty
+	config := LoggerConfig{} // empty config
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+	app.GET("/test", func(c *Context) {
+		c.String(200, "OK")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	// Should not panic and should work with defaults
+	app.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+}
+
+func BenchmarkLoggerWithConfig(b *testing.B) {
+	var buffer strings.Builder
+	config := LoggerConfig{
+		Output:    &buffer,
+		SkipPaths: []string{"/health"},
+	}
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+	app.GET("/bench", func(c *Context) {
+		c.String(200, "OK")
+	})
+
+	req := httptest.NewRequest("GET", "/bench", nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
