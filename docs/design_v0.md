@@ -1,6 +1,6 @@
-## Relay Design 文档
+## goxpress Design 文档
 
-Relay 是一个用 Go 开发的 Web 框架，目标是成为“Go 版 Express”，既保留 Express 的开发体验，又充分发挥 Go 的高性能和可预测性。
+goxpress 是一个用 Go 开发的 Web 框架，目标是成为“Go 版 Express”，既保留 Express 的开发体验，又充分发挥 Go 的高性能和可预测性。
 
 ---
 
@@ -25,7 +25,7 @@ Relay 是一个用 Go 开发的 Web 框架，目标是成为“Go 版 Express”
 2. **拥抱 `net/http`**
 
    * `Engine` 实现 `http.Handler`，可以与标准库或第三方中间件无缝集成。
-   * 用户也可将标准 `http.Handler` 包装为 Relay 中间件。
+   * 用户也可将标准 `http.Handler` 包装为 goxpress 中间件。
 3. **中间件驱动**
 
    * 框架灵魂在于中间件（Middleware）。所有功能（日志、认证、CORS、压缩）均通过插件形式提供。
@@ -46,7 +46,7 @@ Request → Server (Engine) → Router → [Middleware Chain] → Handler → Re
 
 1. **Engine (引擎/应用)**
 
-   * `app := relay.New()`，实现 `http.Handler`。
+   * `app := goxpress.New()`，实现 `http.Handler`。
    * 管理全局中间件、路由实例。
    * 提供：`Use()`, `UseError()`, `GET/POST/...`, `Route()`, `Mount()`, `Listen()`。
 2. **Router (路由器)**
@@ -68,15 +68,15 @@ Request → Server (Engine) → Router → [Middleware Chain] → Handler → Re
 
 ### 4. Express 式 API 设计
 
-| Express                      | Relay                                    |
+| Express                      | goxpress                                    |
 | ---------------------------- | ---------------------------------------- |
-| `const app = express()`      | `app := relay.New()`                     |
+| `const app = express()`      | `app := goxpress.New()`                     |
 | `app.use(mw)`                | `app.Use(mw...)`                         |
 | `app.get(path, h...)`        | `app.GET(path, h...)`                    |
 | `app.post(path, h...)`       | `app.POST(path, h...)`                   |
 | `app.listen(3000, cb)`       | `app.Listen(":3000", cb?)`               |
 | `app.route("/x").get()`      | `app.Route("/x").GET(...).POST(...)`     |
-| `const r = express.Router()` | `r := relay.NewRouter()`                 |
+| `const r = express.Router()` | `r := goxpress.NewRouter()`                 |
 | `app.use('/api', r)`         | `app.Mount("/api", r)`                   |
 | `next(err)`                  | `c.Next(err)` + `app.UseError(errMw...)` |
 
@@ -86,9 +86,9 @@ Request → Server (Engine) → Router → [Middleware Chain] → Handler → Re
 
 ### 5. 内置中间件与插件
 
-* **BodyParser**：`app.Use(relay.BodyParser())`，支持 JSON 与 URL‑encoded。
-* **CookieParser**：`app.Use(relay.CookieParser())`。
-* **CORS**：`app.Use(relay.CORS())`。
+* **BodyParser**：`app.Use(goxpress.BodyParser())`，支持 JSON 与 URL‑encoded。
+* **CookieParser**：`app.Use(goxpress.CookieParser())`。
+* **CORS**：`app.Use(goxpress.CORS())`。
 * **Static**：`app.Static("/assets", "./public")`（同 Express `express.static`）。
 * **Logger & Recover**：默认请求日志与 Panic 捕获。
 * **Error Handler**：`app.UseError(handler)`，捕获 `c.Next(err)` 或 Panic，统一返回。
@@ -126,17 +126,17 @@ Request → Server (Engine) → Router → [Middleware Chain] → Handler → Re
 ### 9. 开发者体验示例
 
 ```go
-app := relay.New().
-    Use(relay.Logger()).
-    Use(relay.Recover()).
+app := goxpress.New().
+    Use(goxpress.Logger()).
+    Use(goxpress.Recover()).
     Static("/public", "./public").
 
-api := relay.NewRouter().
+api := goxpress.NewRouter().
     Use(auth).
     GET("/users/:id", getUser)
 
 app.Mount("/api", api).
-    GET("/", func(c *relay.Context) {
+    GET("/", func(c *goxpress.Context) {
         c.String(200, "Hello, World!")
     }).
     Listen(":8080", nil)

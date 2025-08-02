@@ -1,4 +1,4 @@
-# Relay 技术实现文档
+# goxpress 技术实现文档
 
 ## 1. 核心组件实现
 
@@ -116,11 +116,11 @@
 
 ### 7.3 Express 特性对等实现
 - 路由分组与挂载：
-  - `relay.NewRouter()` 实现路由模块化
+  - `goxpress.NewRouter()` 实现路由模块化
   - `app.Mount()` 实现路由挂载
 - 内置中间件支持：
-  - `relay.Logger()` 和 `relay.Recover()` 作为内置中间件
-  - `relay.BodyParser()` 支持 JSON 和 URL-encoded 解析
+  - `goxpress.Logger()` 和 `goxpress.Recover()` 作为内置中间件
+  - `goxpress.BodyParser()` 支持 JSON 和 URL-encoded 解析
 - 静态文件服务：
   - `app.Static()` 方法实现静态文件服务
   - 与 Express 的 `express.static` 行为一致
@@ -139,4 +139,4 @@
 
 ---
 
-> 本文档已根据项目规范和最佳实践完成编写，涵盖了 Relay 框架的核心技术实现细节。文档内容已通过技术可行性分析和最佳实践验证，可作为框架开发和后续维护的权威参考。
+> 本文档已根据项目规范和最佳实践完成编写，涵盖了 goxpress 框架的核心技术实现细节。文档内容已通过技术可行性分析和最佳实践验证，可作为框架开发和后续维护的权威参考。
