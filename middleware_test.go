@@ -479,6 +479,114 @@ func TestLoggerWithConfig_SkipPaths(t *testing.T) {
 	}
 }
 
+func TestLoggerWithConfig_CustomFormatter(t *testing.T) {
+	var logOutput strings.Builder
+
+	customFormatter := func(c *Context, start time.Time, duration time.Duration) string {
+		return fmt.Sprintf("CUSTOM: %s %s\n", c.Request.Method, c.Request.URL.Path)
+	}
+
+	config := LoggerConfig{
+		Formatter: customFormatter,
+		Output:    &logOutput,
+	}
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+	app.GET("/test", func(c *Context) {
+		c.String(200, "OK")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	logStr := logOutput.String()
+	expected := "CUSTOM: GET /test\n"
+	if logStr != expected {
+		t.Errorf("Expected custom format '%s', got '%s'", expected, logStr)
+	}
+}
+
+func TestLoggerWithConfig_JSONFormatter(t *testing.T) {
+	var logOutput strings.Builder
+
+	jsonFormatter := func(c *Context, start time.Time, duration time.Duration) string {
+		return fmt.Sprintf(`{"method":"%s","path":"%s","status":%d,"remote_addr":"%s"}`+"\n",
+			c.Request.Method,
+			c.Request.URL.Path,
+			200, // Using fixed status code since we can't easily get it from Context
+			c.Request.RemoteAddr)
+	}
+
+	config := LoggerConfig{
+		Formatter: jsonFormatter,
+		Output:    &logOutput,
+	}
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+	app.GET("/api/test", func(c *Context) {
+		c.String(200, "OK")
+	})
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.RemoteAddr = "127.0.0.1:8080"
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	logStr := logOutput.String()
+
+	// Check for JSON format components
+	if !strings.Contains(logStr, `"method":"GET"`) {
+		t.Error("JSON log should contain method field")
+	}
+	if !strings.Contains(logStr, `"path":"/api/test"`) {
+		t.Error("JSON log should contain path field")
+	}
+	if !strings.Contains(logStr, `"status":200`) {
+		t.Error("JSON log should contain status field")
+	}
+	if !strings.Contains(logStr, `"remote_addr":"127.0.0.1:8080"`) {
+		t.Error("JSON log should contain remote_addr field")
+	}
+}
+
+func TestLoggerWithConfig_SimpleFormatter(t *testing.T) {
+	var logOutput strings.Builder
+
+	simpleFormatter := func(c *Context, start time.Time, duration time.Duration) string {
+		return fmt.Sprintf("%s %s\n", c.Request.Method, c.Request.URL.Path)
+	}
+
+	config := LoggerConfig{
+		Formatter: simpleFormatter,
+		Output:    &logOutput,
+	}
+
+	app := New()
+	app.Use(LoggerWithConfig(config))
+	app.GET("/simple", func(c *Context) {
+		c.String(200, "OK")
+	})
+
+	req := httptest.NewRequest("GET", "/simple", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	logStr := logOutput.String()
+
+	if !strings.Contains(logStr, "GET /simple") {
+		t.Error("Simple log should contain method and path")
+	}
+	// Should not contain remote address in simple format
+	if strings.Contains(logStr, "192.0.2.1") {
+		t.Error("Simple log should not contain remote address")
+	}
+}
+
 func TestLoggerWithConfig_CustomOutput(t *testing.T) {
 	var buffer1, buffer2 strings.Builder
 

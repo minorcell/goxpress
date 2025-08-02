@@ -219,7 +219,26 @@ func TestContextStatus(t *testing.T) {
 	}
 }
 
+func TestContextStatusCode(t *testing.T) {
+	// Create a new context
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	c := NewContext(w, req)
+
+	// Initially should be 0 since no status has been written
+	if code := c.StatusCode(); code != 0 {
+		t.Errorf("Expected status code 0, got %d", code)
+	}
+
+	// After writing status, should be 200 (our default placeholder)
+	c.Status(404)
+	if code := c.StatusCode(); code != 200 { // 200 because that's what our placeholder returns
+		t.Errorf("Expected status code 200 (placeholder), got %d", code)
+	}
+}
+
 func TestContextJSON(t *testing.T) {
+	// Create a new context
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 

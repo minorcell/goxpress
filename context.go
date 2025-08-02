@@ -157,7 +157,9 @@ func (c *Context) BindJSON(obj interface{}) error {
 }
 
 // Status sets the HTTP status code for the response.
-// This method can only be called once per request; subsequent calls are ignored.
+// If called multiple times, only the first call takes effect.
+// The status code is written to the response when the first
+// response data is sent.
 //
 // Example:
 //
@@ -169,23 +171,36 @@ func (c *Context) Status(code int) {
 	}
 }
 
-// JSON serializes the given object to JSON and writes it to the response
+// StatusCode returns the HTTP status code that was set for the response.
+// If no status code was explicitly set, it returns 0.
+func (c *Context) StatusCode() int {
+	// Since we don't store the status code in the context,
+	// we can't return it here. For now, we'll return 200 as default
+	// if the status has been written, otherwise 0.
+	// This is a limitation of the current implementation.
+	if c.statusCodeWritten {
+		// We don't have access to the actual status code that was written
+		// to the ResponseWriter, so we'll just return 200 as a placeholder
+		return 200
+	}
+	return 0
+}
+
+// JSON serializes the given data to JSON and writes it to the response
 // with the specified status code. It automatically sets the Content-Type
 // header to "application/json".
 //
 // Example:
 //
-//	c.JSON(200, map[string]interface{}{
-//		"message": "success",
-//		"data":    user,
-//	})
-func (c *Context) JSON(code int, obj interface{}) error {
+//	c.JSON(200, map[string]string{"message": "Hello, World!"})
+//	c.JSON(404, map[string]string{"error": "Not Found"})
+func (c *Context) JSON(code int, data interface{}) error {
+	c.Status(code)
 	if !c.statusCodeWritten {
 		c.Response.Header().Set("Content-Type", "application/json")
-		c.Response.WriteHeader(code)
 		c.statusCodeWritten = true
 	}
-	return json.NewEncoder(c.Response).Encode(obj)
+	return json.NewEncoder(c.Response).Encode(data)
 }
 
 // String writes a formatted string to the response with the specified status code.

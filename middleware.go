@@ -23,6 +23,10 @@ type LoggerConfig struct {
 	// Output specifies where to write the log output.
 	// If nil, defaults to os.Stdout.
 	Output io.Writer
+
+	// Formatter specifies a function to format log entries.
+	// If nil, defaults to DefaultLogFormatter.
+	Formatter LogFormatter
 }
 
 // LogFormatter is a function type for custom log formatting
@@ -130,6 +134,10 @@ func LoggerWithConfig(config LoggerConfig) HandlerFunc {
 	if config.Output == nil {
 		config.Output = os.Stdout
 	}
+	
+	if config.Formatter == nil {
+		config.Formatter = DefaultLogFormatter
+	}
 
 	return func(c *Context) {
 		// Check if this path should be skipped
@@ -146,7 +154,7 @@ func LoggerWithConfig(config LoggerConfig) HandlerFunc {
 
 		// Log request details after processing
 		duration := time.Since(start)
-		logEntry := DefaultLogFormatter(c, start, duration)
+		logEntry := config.Formatter(c, start, duration)
 		log.Println(logEntry)
 
 		// Write to configured output
