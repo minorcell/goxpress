@@ -5,11 +5,100 @@ package goxpress
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
-// Logger returns a middleware that logs HTTP requests.
+// LoggerConfig defines configuration options for the logger middleware
+type LoggerConfig struct {
+	// SkipPaths is a list of URL paths to skip logging for.
+	// Supports exact matches and simple wildcard patterns with *.
+	// Examples: "/health", "/metrics", "/api/*/health"
+	SkipPaths []string
+
+	// Output specifies where to write the log output.
+	// If nil, defaults to os.Stdout.
+	Output io.Writer
+
+	// Formatter specifies a function to format log entries.
+	// If nil, defaults to DefaultLogFormatter.
+	Formatter LogFormatter
+}
+
+// LogFormatter is a function type for custom log formatting
+type LogFormatter func(c *Context, start time.Time, duration time.Duration) string
+
+// DefaultLogFormatter returns the default log format
+func DefaultLogFormatter(c *Context, start time.Time, duration time.Duration) string {
+	return fmt.Sprintf("[%s] %s %s %v\n",
+		c.Request.Method,
+		c.Request.URL.Path,
+		c.Request.RemoteAddr,
+		duration,
+	)
+}
+
+// matchPath checks if a path matches any of the skip patterns
+func matchPath(path string, skipPaths []string) bool {
+	for _, pattern := range skipPaths {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return true
+		}
+		// Also support simple wildcard matching
+		if strings.Contains(pattern, "*") {
+			if simpleWildcardMatch(path, pattern) {
+				return true
+			}
+		} else if path == pattern {
+			return true
+		}
+	}
+	return false
+}
+
+// simpleWildcardMatch performs simple wildcard matching
+func simpleWildcardMatch(path, pattern string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return path == pattern
+	}
+
+	// Check if path starts with first part
+	if !strings.HasPrefix(path, parts[0]) {
+		return false
+	}
+
+	// Check if path ends with last part
+	if !strings.HasSuffix(path, parts[len(parts)-1]) {
+		return false
+	}
+
+	// Check middle parts
+	remaining := path
+	for i, part := range parts {
+		if i == 0 {
+			remaining = remaining[len(part):]
+			continue
+		}
+		if i == len(parts)-1 {
+			break
+		}
+
+		idx := strings.Index(remaining, part)
+		if idx == -1 {
+			return false
+		}
+		remaining = remaining[idx+len(part):]
+	}
+
+	return true
+}
+
+// Logger returns a middleware that logs HTTP requests using default configuration.
 // It records the HTTP method, URL path, client address, and processing time
 // for each request. The log output goes to the standard logger.
 //
@@ -26,7 +115,37 @@ import (
 // Output format: [METHOD] path clientAddr duration
 // Example output: [GET] /api/users 127.0.0.1:54321 1.2ms
 func Logger() HandlerFunc {
+	return LoggerWithConfig(LoggerConfig{})
+}
+
+// LoggerWithConfig returns a middleware that logs HTTP requests with custom configuration.
+// It allows you to configure skip paths, output destination, and log format.
+//
+// Example:
+//
+//	config := goxpress.LoggerConfig{
+//		SkipPaths: []string{"/health", "/metrics", "/api/*/internal"},
+//		Output:    logFile, // io.Writer
+//		Formatter: goxpress.DefaultLogFormatter,
+//	}
+//	app.Use(goxpress.LoggerWithConfig(config))
+func LoggerWithConfig(config LoggerConfig) HandlerFunc {
+	// Set defaults
+	if config.Output == nil {
+		config.Output = os.Stdout
+	}
+	
+	if config.Formatter == nil {
+		config.Formatter = DefaultLogFormatter
+	}
+
 	return func(c *Context) {
+		// Check if this path should be skipped
+		if matchPath(c.Request.URL.Path, config.SkipPaths) {
+			c.Next()
+			return
+		}
+
 		// Record start time
 		start := time.Now()
 
@@ -35,12 +154,11 @@ func Logger() HandlerFunc {
 
 		// Log request details after processing
 		duration := time.Since(start)
-		log.Printf("[%s] %s %s %v",
-			c.Request.Method,
-			c.Request.URL.Path,
-			c.Request.RemoteAddr,
-			duration,
-		)
+		logEntry := config.Formatter(c, start, duration)
+		log.Println(logEntry)
+
+		// Write to configured output
+		config.Output.Write([]byte(logEntry))
 	}
 }
 

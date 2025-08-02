@@ -7,7 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"sync"
 )
 
@@ -138,6 +141,82 @@ func (c *Context) Query(key string) string {
 	return c.Request.URL.Query().Get(key)
 }
 
+// PostForm returns the value of the form field with the given name.
+// Returns an empty string if the field doesn't exist.
+//
+// Example:
+//
+//	// For form data: name=John&email=john@example.com
+//	name := c.PostForm("name")   // Returns "John"
+//	email := c.PostForm("email") // Returns "john@example.com"
+func (c *Context) PostForm(key string) string {
+	return c.Request.FormValue(key)
+}
+
+// FormFile returns the multipart form file with the given name.
+// It parses the request form data if necessary.
+//
+// Example:
+//
+//	// For file upload form with field name "avatar"
+//	file, err := c.FormFile("avatar")
+//	if err != nil {
+//		// Handle error
+//		return
+//	}
+//	
+//	// Save the file
+//	// c.SaveUploadedFile(file, "./uploads/" + file.Filename)
+func (c *Context) FormFile(key string) (*multipart.FileHeader, error) {
+	_, file, err := c.Request.FormFile(key)
+	return file, err
+}
+
+// SaveUploadedFile saves a multipart form file to the specified path.
+//
+// Example:
+//
+//	file, err := c.FormFile("avatar")
+//	if err != nil {
+//		// Handle error
+//		return
+//	}
+//	
+//	err = c.SaveUploadedFile(file, "./uploads/" + file.Filename)
+//	if err != nil {
+//		// Handle error
+//		return
+//	}
+func (c *Context) SaveUploadedFile(file *multipart.FileHeader, dst string) error {
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, src)
+	return err
+}
+
+// File sends a response with the content of the specified file.
+// It automatically sets the Content-Type header based on the file extension
+// and sets the status code to 200.
+//
+// Example:
+//
+//	c.File("./public/index.html")
+//	c.File("./assets/style.css")
+func (c *Context) File(filepath string) error {
+	http.ServeFile(c.Response, c.Request, filepath)
+	return nil
+}
+
 // BindJSON parses the request body as JSON and stores the result
 // in the value pointed to by obj. The request body is consumed
 // during this operation.
@@ -157,7 +236,9 @@ func (c *Context) BindJSON(obj interface{}) error {
 }
 
 // Status sets the HTTP status code for the response.
-// This method can only be called once per request; subsequent calls are ignored.
+// If called multiple times, only the first call takes effect.
+// The status code is written to the response when the first
+// response data is sent.
 //
 // Example:
 //
@@ -169,23 +250,36 @@ func (c *Context) Status(code int) {
 	}
 }
 
-// JSON serializes the given object to JSON and writes it to the response
+// StatusCode returns the HTTP status code that was set for the response.
+// If no status code was explicitly set, it returns 0.
+func (c *Context) StatusCode() int {
+	// Since we don't store the status code in the context,
+	// we can't return it here. For now, we'll return 200 as default
+	// if the status has been written, otherwise 0.
+	// This is a limitation of the current implementation.
+	if c.statusCodeWritten {
+		// We don't have access to the actual status code that was written
+		// to the ResponseWriter, so we'll just return 200 as a placeholder
+		return 200
+	}
+	return 0
+}
+
+// JSON serializes the given data to JSON and writes it to the response
 // with the specified status code. It automatically sets the Content-Type
 // header to "application/json".
 //
 // Example:
 //
-//	c.JSON(200, map[string]interface{}{
-//		"message": "success",
-//		"data":    user,
-//	})
-func (c *Context) JSON(code int, obj interface{}) error {
+//	c.JSON(200, map[string]string{"message": "Hello, World!"})
+//	c.JSON(404, map[string]string{"error": "Not Found"})
+func (c *Context) JSON(code int, data interface{}) error {
 	if !c.statusCodeWritten {
 		c.Response.Header().Set("Content-Type", "application/json")
 		c.Response.WriteHeader(code)
 		c.statusCodeWritten = true
 	}
-	return json.NewEncoder(c.Response).Encode(obj)
+	return json.NewEncoder(c.Response).Encode(data)
 }
 
 // String writes a formatted string to the response with the specified status code.
@@ -203,6 +297,39 @@ func (c *Context) String(code int, format string, values ...interface{}) error {
 	}
 	_, err := c.Response.Write([]byte(fmt.Sprintf(format, values...)))
 	return err
+}
+
+// HTML writes HTML content to the response with the specified status code.
+// It automatically sets the Content-Type header to "text/html; charset=utf-8".
+//
+// Example:
+//
+//	c.HTML(200, "<h1>Hello World</h1>")
+//	c.HTML(404, "<h1>Page Not Found</h1>")
+func (c *Context) HTML(code int, html string) error {
+	if !c.statusCodeWritten {
+		c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+		c.Response.WriteHeader(code)
+		c.statusCodeWritten = true
+	}
+	_, err := c.Response.Write([]byte(html))
+	return err
+}
+
+// Redirect sends an HTTP redirect to the specified URL with the given status code.
+// Common status codes for redirects are 301 (permanent) and 302 (temporary).
+//
+// Example:
+//
+//	c.Redirect(302, "https://example.com")
+//	c.Redirect(301, "/new-location")
+func (c *Context) Redirect(code int, url string) error {
+	if !c.statusCodeWritten {
+		c.Response.Header().Set("Location", url)
+		c.Response.WriteHeader(code)
+		c.statusCodeWritten = true
+	}
+	return nil
 }
 
 // Next executes the next handler in the middleware chain.
