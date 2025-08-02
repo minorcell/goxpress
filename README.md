@@ -11,11 +11,18 @@ English | [中文](README_zh.md)
 
 ## Why goxpress?
 
-To be honest, the Go ecosystem already has tons of excellent web frameworks like Gin, Fiber, Echo, and others. They're all mature and have rich ecosystems. So why do we need another one? Is this just reinventing the wheel? Well, I think we can look at a few points that motivated me initially:
+In fact, the Go ecosystem already has many excellent and mature web frameworks such as Gin, Fiber, Echo, and others, all of which enjoy broad community support and rich ecosystem resources. So why do we still need another framework — goxpress? Is it just another case of “reinventing the wheel”?
 
-- **Embrace Go's "less is more" philosophy with the simplest API**: On one hand, you can develop rapidly with zero configuration - just three lines of code for a basic web service. On the other hand, a simple API means incredible flexibility, leaving the coding to developers and rejecting heavy templating.
-- **Inherit Express.js API style**: There are two main considerations here: friendliness for frontend developers transitioning to Go development - honestly, developers familiar with Express can use Goxpress with almost zero learning cost, it's just switching from JavaScript to Go. Also, Express itself is excellent enough, and borrowing its design greatly reduces our chances of making mistakes. It's like "standing on the shoulders of giants to go further."
-- **Make full use of Go's language features**: Things like high concurrency capabilities, rich standard library support, and type system - features that Express or Node.js simply don't have.
+I believe the answer to this question lies in the following core design principles:
+
+- ** Adhering to Go’s “less is more” philosophy by providing a minimal API **
+  goxpress offers a zero-configuration, quick-start development experience. You can launch a basic web service with just three lines of code. A simple API not only lowers the learning curve but also retains high flexibility, allowing developers to freely control business logic instead of being constrained by over-encapsulation.
+
+- ** Borrowing Express’s API style to reduce the learning curve **
+  Choosing a programming style similar to Express is based on two main considerations: first, it is more friendly to front-end developers, especially those familiar with Node.js, enabling an almost painless transition to Go; second, Express itself is a battle-tested framework whose design philosophy is worth learning from. Standing on the shoulders of giants lets us move more steadily and further.
+
+- ** Leveraging Go’s language strengths **
+  goxpress is not simply a “Go version of Express,” but rather an optimization that takes advantage of Go’s language features. For example, native high concurrency capabilities, a strong type system, and a stable, powerful standard library — all foundational strengths that the Node.js ecosystem struggles to match.
 
 ## Features
 
@@ -278,7 +285,7 @@ app.POST("/users", func(c *goxpress.Context) {
         Email string `json:"email"`
         Age   int    `json:"age"`
     }
-    
+
     if err := c.BindJSON(&user); err != nil {
         c.JSON(400, map[string]string{"error": "JSON format has issues"})
         return
@@ -595,6 +602,7 @@ When it comes to performance, we're pretty confident. In our benchmarks:
 This is an interesting question. Honestly, for most applications, framework performance might not be the bottleneck. Database queries, network I/O, and business logic complexity often have much more overhead than the framework itself.
 
 However, high-performance frameworks do have several benefits:
+
 - **Lower resource consumption** - means lower cloud server costs
 - **Better user experience** - faster response times
 - **Higher concurrency handling** - can support more users
@@ -652,9 +660,9 @@ Write a timing middleware to monitor request processing time:
 func TimingMiddleware() goxpress.HandlerFunc {
     return func(c *goxpress.Context) {
         start := time.Now()
-        
+
         c.Next()
-        
+
         duration := time.Since(start)
         println("Request processing time:", duration.String())
     }
@@ -690,6 +698,7 @@ func TestAPI(t *testing.T) {
 Everyone's welcome to contribute code! If you have any ideas or find bugs, feel free to create issues or pull requests.
 
 Before submitting code, please ensure:
+
 - Code passes all tests
 - New features have corresponding test cases
 - Follow Go coding standards

@@ -11,16 +11,23 @@
 
 ## 前言
 
-事实上，Go 生态中已经有非常多优秀的 Web 框架，如 Gin、Fiber、Echo 等。他们都已经非常成熟，并且有着丰富的生态；那么，为什么还需要 goxpress 呢？是不是造轮子？我想这个问题，我们可以来看下面几点，这些是我最初的设想：
+事实上，Go 生态中已有许多优秀且成熟的 Web 框架，如 Gin、Fiber、Echo 等，它们拥有广泛的社区支持和丰富的生态资源。那么，为什么我们还需要另一个框架 —— goxpress？这是否只是又一次“造轮子”？
 
-- **继承 Go "少即是多"的思想，提供最简洁的 API**：一方面可以零配置快速开发，三行代码实现一个最基础的 Web 服务，另外一点简洁的 API 意味着非常高的灵活性，把编码留给开发者，拒绝高度模版化。
-- **继承 Express 的 API 风格**：这里主要有两点考虑：对前端转 Go 开发友好型，毫不夸张的说，熟悉 Express 的开发者几乎可以零成本的使用 Goxpress，无非就是从 Javascript 换成 Golang；另外就是 Express 本身足够优秀，借鉴它的设计，我们很大程度上会减少犯错，这就像是"站在巨人的肩膀上，可以走的更远"。
-- **充分利用Go的语言特性**：比如高并发能力、丰富的标准库支持、类型系统，这些是express或者说nodejs并不具有的。
+我认为这个问题的答案可以从以下几个核心设计理念中找到：
+
+- **坚持 Go 的“少即是多”哲学，提供极简 API**
+  goxpress 提供零配置、快速上手的开发体验。只需三行代码，即可启动一个基本的 Web 服务。简洁的 API 不仅意味着更低的学习成本，也保留了高度的灵活性，让开发者能够更自由地掌控业务逻辑，而不是被过度封装所束缚。
+
+- **借鉴 Express 的 API 风格，降低学习曲线**
+  选择与 Express 接近的编程风格有两个主要考虑：一是对前端开发者（尤其是熟悉 Node.js 的开发者）更友好，几乎可以“无痛”迁移到 Go；二是 Express 本身是一款久经验证的框架，其设计理念值得借鉴。站在巨人的肩膀上，可以走得更稳、更远。
+
+- **发挥 Go 的语言优势**
+  goxpress 并非简单的“Go 版 Express”，而是结合了 Go 的语言特性加以优化。例如原生的高并发能力、强大的类型系统、稳定且功能强大的标准库支持，这些都是 Node.js 生态所难以比拟的基础能力。
 
 ## 特性
 
 - 🚀 **Express.js 风格的 API** - 熟悉的语法，上手即用
-- ⚡ **高性能** - 100万+ QPS，路由匹配极速
+- ⚡ **高性能** - 100 万+ QPS，路由匹配极速
 - 🛡️ **类型安全** - 完整的 Go 类型支持，IDE 友好
 - 🔧 **中间件支持** - 强大的中间件生态，错误处理完善
 - 🗂️ **路由分组** - 优雅的 API 组织方式
@@ -278,7 +285,7 @@ app.POST("/users", func(c *goxpress.Context) {
         Email string `json:"email"`
         Age   int    `json:"age"`
     }
-    
+
     if err := c.BindJSON(&user); err != nil {
         c.JSON(400, map[string]string{"error": "JSON 格式有问题"})
         return
@@ -589,7 +596,7 @@ func CORSMiddleware() goxpress.HandlerFunc {
 
 说到性能，我们还是很有信心的。在我们的基准测试中：
 
-- **吞吐量**: 超过 100万 QPS（在一个 8 核 CPU 的机器上）
+- **吞吐量**: 超过 100 万 QPS（在一个 8 核 CPU 的机器上）
 - **内存使用**: 每个请求约 2.5KB 内存分配
 - **延迟**: P99 延迟低于 1ms
 
@@ -598,6 +605,7 @@ func CORSMiddleware() goxpress.HandlerFunc {
 这是个有趣的问题。说实话，对于大多数应用来说，框架的性能可能不是瓶颈。数据库查询、网络 I/O、业务逻辑的复杂度往往比框架本身的开销大得多。
 
 不过，高性能的框架确实有几个好处：
+
 - **更低的资源消耗** - 意味着更低的云服务器成本
 - **更好的用户体验** - 响应时间更快
 - **更高的并发处理能力** - 可以支持更多的用户
@@ -655,9 +663,9 @@ type ErrorHandlerFunc func(*Context, error)
 func TimingMiddleware() goxpress.HandlerFunc {
     return func(c *goxpress.Context) {
         start := time.Now()
-        
+
         c.Next()
-        
+
         duration := time.Since(start)
         println("请求处理时间:", duration.String())
     }
@@ -693,6 +701,7 @@ func TestAPI(t *testing.T) {
 欢迎大家贡献代码！如果你有任何想法或者发现了 bug，随时提 issue 或者 pull request。
 
 在提交代码之前，请确保：
+
 - 代码通过了所有测试
 - 新功能有对应的测试用例
 - 遵循 Go 的代码规范
