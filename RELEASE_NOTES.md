@@ -1,39 +1,57 @@
-# Release Notes - goxpress v1.0.0
+# Release Notes - goxpress v1.1.0
 
-🎉 **Initial Release**
+## 🎉 New Features in v1.1.0
 
-We're excited to announce the first stable release of goxpress - a fast, intuitive web framework for Go inspired by Express.js!
+This release adds significant enhancements to request/response handling, logging flexibility, and developer experience while maintaining the framework's performance and simplicity.
 
-## 🌟 What is goxpress?
+### 🔧 **Advanced Logger Configuration**
 
-goxpress brings the familiar Express.js development experience to Go while maintaining excellent performance and full type safety. It's designed for developer productivity without sacrificing the performance and reliability that Go is known for.
+- **Custom Formatters**: Define custom log formats with `Formatter` function
+- **Path Filtering**: Skip logging for specific paths with `SkipPaths`
+- **Flexible Output**: Direct logs to any `io.Writer`
+- **Wildcard Matching**: Use patterns like `/api/*/health` for path filtering
 
-## ✨ Key Features
+```go
+config := goxpress.LoggerConfig{
+    SkipPaths: []string{"/health", "/metrics"},
+    Output:    logFile,
+    Formatter: func(c *goxpress.Context, start time.Time, duration time.Duration) string {
+        return fmt.Sprintf("CUSTOM: %s %s\n", c.Request.Method, c.Request.URL.Path)
+    },
+}
+app.Use(goxpress.LoggerWithConfig(config))
+```
 
-### 🚀 **Express.js-like API**
-- Familiar routing: `app.GET()`, `app.POST()`, etc.
-- Intuitive middleware system
-- Chainable method calls
-- Route groups and nested routing
+### 📝 **Enhanced Response Handling**
 
-### ⚡ **High Performance**
-- **1.8M+ requests/sec** for simple routes
-- **1.2M+ requests/sec** for JSON responses
-- Efficient Radix Tree routing algorithm
-- Context object pooling for memory efficiency
+- **HTML Responses**: `c.HTML(200, "<h1>Hello World</h1>")`
+- **HTTP Redirects**: `c.Redirect(302, "https://example.com")`
+- **Static File Serving**: `c.File("./public/index.html")`
 
-### 🛡️ **Type Safe & Go Native**
-- Full Go type safety
-- Zero external dependencies
-- Built on Go standard library
-- Excellent IDE support
+### 📥 **Improved Request Processing**
 
-### 🔧 **Production Ready**
-- 90.3% test coverage
-- Comprehensive benchmarks
-- Panic recovery middleware
-- Request logging
-- Error handling system
+- **Form Data Extraction**: `c.PostForm("fieldname")`
+- **File Upload Support**: `c.FormFile("avatar")` + `c.SaveUploadedFile()`
+- **Enhanced JSON Binding**: Improved error handling in `c.BindJSON()`
+
+### 📚 **Comprehensive Examples**
+
+10+ new examples added with detailed documentation:
+- [basic_http] - HTTP methods and parameters
+- [context_request] - Form/data handling
+- [context_response] - HTML/redirect/file responses
+- [custom_middleware] - Custom middleware implementation
+- [rest_api] - Complete REST API implementation
+
+### 🧪 **Full Test Coverage**
+
+- HTML response validation
+- Redirect functionality testing
+- Form data processing tests
+- File upload and serving verification
+- Custom logger formatter validation
+
+## ✨ Key Features (Carried over from v1.0.0)
 
 ## 📦 Installation
 
@@ -41,62 +59,23 @@ goxpress brings the familiar Express.js development experience to Go while maint
 go get github.com/minorcell/goxpress
 ```
 
-## 🚀 Quick Start
+## 🛠️ Built-in Features
 
-```go
-package main
+### Middleware
+- ✅ Request logging (custom formatters)
+- ✅ Panic recovery
+- ✅ Custom middleware support
+- ✅ Error handling chain
 
-import "github.com/minorcell/goxpress"
-
-func main() {
-    app := goxpress.New()
-    
-    app.GET("/", func(c *goxpress.Context) {
-        c.String(200, "Hello, World!")
-    })
-    
-    app.Listen(":8080", func() {
-        println("Server running on http://localhost:8080")
-    })
-}
-```
-
-## 🎯 Core Components
-
-### HTTP Routing
-- **Static routes**: `/users`
-- **Parameters**: `/users/:id`
-- **Wildcards**: `/files/*filepath`
-- **Route groups**: `/api/v1`
-
-### Middleware System
-```go
-app.Use(goxpress.Logger())
-app.Use(goxpress.Recover())
-app.Use(func(c *goxpress.Context) {
-    // Custom middleware
-    c.Next()
-})
-```
-
-### Request Handling
-```go
-app.POST("/users", func(c *goxpress.Context) {
-    var user User
-    if err := c.BindJSON(&user); err != nil {
-        c.JSON(400, map[string]string{"error": "Invalid JSON"})
-        return
-    }
-    c.JSON(201, user)
-})
-```
-
-### Error Handling
-```go
-app.UseError(func(err error, c *goxpress.Context) {
-    c.JSON(500, map[string]string{"error": err.Error()})
-})
-```
+### Request/Response
+- ✅ JSON binding and responses
+- ✅ Query parameter access
+- ✅ URL parameter extraction
+- ✅ Form data processing
+- ✅ File upload handling
+- ✅ HTML responses
+- ✅ HTTP redirects (301, 302)
+- ✅ Static file serving
 
 ## 📊 Performance Benchmarks
 
@@ -177,6 +156,17 @@ goxpress/
 ├── 🧪 Tests & Benchmarks
 │   ├── *_test.go        # Unit tests
 │   └── benchmark_*.go   # Performance tests
+├── 📚 Examples
+│   ├── hello_world/     # Basic example
+│   ├── basic_http/      # HTTP methods and parameters
+│   ├── middleware/      # Built-in middleware usage
+│   ├── custom_middleware/ # Custom middleware
+│   ├── context_request/ # Request handling
+│   ├── context_response/ # Response types
+│   ├── route_groups/    # Route organization
+│   ├── nested_groups/   # Complex routing
+│   ├── error_handling/  # Error management
+│   └── rest_api/        # Complete REST API
 └── 📄 Project Files
     ├── go.mod           # Module definition
     └── LICENSE          # MIT License
@@ -184,12 +174,10 @@ goxpress/
 
 ## 🔮 Future Roadmap
 
-While v1.0.0 covers all essential web framework features, future versions may include:
+Future versions may include:
 
-- Static file serving middleware
 - Built-in CORS middleware  
 - Cookie and session support
-- File upload utilities
 - WebSocket support
 - Template engine adapters
 
@@ -205,7 +193,7 @@ We welcome contributions! goxpress is built with ❤️ for the Go community.
 
 ## 📄 License
 
-goxpress is released under the MIT License. See [LICENSE](LICENSE) for details.
+MIT License - See [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 

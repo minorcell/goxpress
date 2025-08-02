@@ -3,7 +3,10 @@ package goxpress
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 )
@@ -235,6 +238,117 @@ func TestContextStatusCode(t *testing.T) {
 	if code := c.StatusCode(); code != 200 { // 200 because that's what our placeholder returns
 		t.Errorf("Expected status code 200 (placeholder), got %d", code)
 	}
+}
+
+func TestContextHTML(t *testing.T) {
+	// Create a new context
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	err := c.HTML(200, "<h1>Hello World</h1>")
+	if err != nil {
+		t.Fatalf("HTML should not return error: %v", err)
+	}
+
+	if w.Code != 200 {
+		t.Errorf("Expected status code 200, got %d", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/html; charset=utf-8" {
+		t.Errorf("Expected Content-Type 'text/html; charset=utf-8', got '%s'", contentType)
+	}
+
+	if w.Body.String() != "<h1>Hello World</h1>" {
+		t.Errorf("Expected body '<h1>Hello World</h1>', got '%s'", w.Body.String())
+	}
+}
+
+func TestContextRedirect(t *testing.T) {
+	// Create a new context
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	err := c.Redirect(302, "https://example.com")
+	if err != nil {
+		t.Fatalf("Redirect should not return error: %v", err)
+	}
+
+	if w.Code != 302 {
+		t.Errorf("Expected status code 302, got %d", w.Code)
+	}
+
+	location := w.Header().Get("Location")
+	if location != "https://example.com" {
+		t.Errorf("Expected Location header 'https://example.com', got '%s'", location)
+	}
+}
+
+func TestContextPostForm(t *testing.T) {
+	// Create a form request
+	form := url.Values{}
+	form.Add("name", "John Doe")
+	form.Add("email", "john@example.com")
+
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	// Test existing field
+	name := c.PostForm("name")
+	if name != "John Doe" {
+		t.Errorf("Expected name 'John Doe', got '%s'", name)
+	}
+
+	// Test another existing field
+	email := c.PostForm("email")
+	if email != "john@example.com" {
+		t.Errorf("Expected email 'john@example.com', got '%s'", email)
+	}
+
+	// Test non-existing field
+	nonexistent := c.PostForm("nonexistent")
+	if nonexistent != "" {
+		t.Errorf("Expected empty string for non-existing field, got '%s'", nonexistent)
+	}
+}
+
+func TestContextFile(t *testing.T) {
+	// Create a temporary file for testing
+	content := "Hello, World!"
+	tmpfile, err := ioutil.TempFile("", "testfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new context
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	c := NewContext(w, req)
+
+	// Test serving the file
+	err = c.File(tmpfile.Name())
+	if err != nil {
+		t.Fatalf("File should not return error: %v", err)
+	}
+
+	// Note: We can't easily test the response content since http.ServeFile is used internally
+	// and it directly writes to the ResponseWriter
 }
 
 func TestContextJSON(t *testing.T) {
